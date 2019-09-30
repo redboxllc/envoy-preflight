@@ -17,6 +17,8 @@ var (
 	envoyDelayMax        int64 = 15
 )
 
+// Sets up default env variables and mock http servers
+// Can be called multiple times, but will only init once per test session
 func initTestingEnv() {
 	if testsInit {
 		return
