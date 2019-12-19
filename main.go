@@ -80,6 +80,12 @@ func main() {
 
 	exitCode := state.ExitCode()
 
+	kill(exitCode)
+
+	os.Exit(exitCode)
+}
+
+func kill(exitCode int) {
 	switch {
 	case config.EnvoyAdminAPI == "":
 		// We don't have an ENVOY_ADMIN_API env var, do nothing
@@ -102,8 +108,6 @@ func main() {
 		killGenericEndpoints()
 		killIstioWithAPI()
 	}
-
-	os.Exit(exitCode)
 }
 
 func killGenericEndpoints() {
@@ -112,7 +116,7 @@ func killGenericEndpoints() {
 	}
 
 	for _, genericEndpoint := range config.GenericQuitEndpoints {
-		resp := typhon.NewRequest(context.Background(), "POST", genericEndpoint, nil).Send().Response()
+		resp := typhon.NewRequest(context.Background(), "POST", strings.Trim(genericEndpoint, " "), nil).Send().Response()
 		log(fmt.Sprintf("Sent POST to %s to Istio, status code: %d", genericEndpoint, resp.StatusCode))
 	}
 }
