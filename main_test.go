@@ -65,16 +65,20 @@ func initTestingEnv() {
 
 // Inits the test environment and starts the blocking
 // Set any env variables for your specific tests prior to calling this
-func initTestEnvAndBlock() {
+// Pass in a negative integer to block but skip kill
+func initAndRun(exitCode int) {
 	initTestingEnv()
 	block()
+	if exitCode >= 0 {
+		kill(exitCode)
+	}
 }
 
 // Tests START_WITHOUT_ENVOY works with failing envoy mock server
 func TestBlockingDisabled(t *testing.T) {
 	fmt.Println("Starting TestBlockingDisabled")
 	os.Setenv("START_WITHOUT_ENVOY", "true")
-	initTestEnvAndBlock()
+	initAndRun(-1)
 	// If your tests hang and never finish, this test "failed"
 	// Also try go test -timeout <seconds>s
 }
@@ -84,7 +88,7 @@ func TestBlockingEnabled(t *testing.T) {
 	fmt.Println("Starting TestBlockingEnabled")
 	os.Setenv("START_WITHOUT_ENVOY", "false")
 	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
-	initTestEnvAndBlock()
+	initAndRun(-1)
 }
 
 // Tests block function with envoy mock server that fails for 15 seconds, then works
@@ -93,14 +97,14 @@ func TestSlowEnvoy(t *testing.T) {
 	os.Setenv("START_WITHOUT_ENVOY", "false")
 	os.Setenv("ENVOY_ADMIN_API", goodEventuallyServer.URL)
 	envoyDelayTimestamp = time.Now().Unix()
-	initTestEnvAndBlock()
+	initAndRun(-1)
 }
 
 // Tests generic quit endpoints are sent
 func TestGenericQuitEndpoints(t *testing.T) {
 	fmt.Println("Starting TestGenericQuitEndpoints")
 	os.Setenv("START_WITHOUT_ENVOY", "true")
-	os.Setenv("GENERIC_QUIT_ENDPOINTS", "https://google.com/,https://redbox.com/")
+	os.Setenv("GENERIC_QUIT_ENDPOINTS", " https://google.com/, https://redbox.com/ ")
 	envoyDelayTimestamp = time.Now().Unix()
-	initTestEnvAndBlock()
+	initAndRun(1)
 }
