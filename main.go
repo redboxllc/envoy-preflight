@@ -94,14 +94,27 @@ func main() {
 		log("NEVER_KILL_ISTIO_ON_FAILURE is true, exiting without killing Istio")
 		os.Exit(exitCode)
 	case config.IstioQuitAPI == "":
-		// We should stop istio, no istio API set.  Use PKILL
+		// No istio API sent, fallback to Pkill method
+		killGenericEndpoints()
 		killIstioWithPkill()
 	default:
 		// Stop istio using api
+		killGenericEndpoints()
 		killIstioWithAPI()
 	}
 
 	os.Exit(exitCode)
+}
+
+func killGenericEndpoints() {
+	if len(config.GenericQuitEndpoints) == 0 {
+		return
+	}
+
+	for _, genericEndpoint := range config.GenericQuitEndpoints {
+		resp := typhon.NewRequest(context.Background(), "POST", genericEndpoint, nil).Send().Response()
+		log(fmt.Sprintf("Sent POST to %s to Istio, status code: %d", genericEndpoint, resp.StatusCode))
+	}
 }
 
 func killIstioWithAPI() {

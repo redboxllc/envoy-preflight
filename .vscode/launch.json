@@ -10,7 +10,9 @@
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}",
-            "env": {},
+            "env": {
+                "GENERIC_QUIT_ENDPOINTS" : "http://google.com,http://redbox.com"
+            },
             "args": ["echo", "redbox", "was", "here"]
         },
         {
@@ -20,7 +22,7 @@
             "mode": "test",
             "program": "${fileDirname}",
             "env": {},
-            "args": []
+            "args": ["-t", "30"]
         }
     ]
 }
