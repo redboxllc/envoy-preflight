@@ -104,7 +104,8 @@ func TestSlowEnvoy(t *testing.T) {
 func TestGenericQuitEndpoints(t *testing.T) {
 	fmt.Println("Starting TestGenericQuitEndpoints")
 	os.Setenv("START_WITHOUT_ENVOY", "true")
-	os.Setenv("GENERIC_QUIT_ENDPOINTS", " https://google.com/, https://redbox.com/ ")
+	// URLs dont matter, just need something that will generate an HTTP response
+	os.Setenv("GENERIC_QUIT_ENDPOINTS", " https://google.com/, https://github.com/ ")
 	envoyDelayTimestamp = time.Now().Unix()
 	initAndRun(1)
 }

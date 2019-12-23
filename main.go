@@ -116,7 +116,7 @@ func killGenericEndpoints() {
 	}
 
 	for _, genericEndpoint := range config.GenericQuitEndpoints {
-		resp := typhon.NewRequest(context.Background(), "POST", strings.Trim(genericEndpoint, " "), nil).Send().Response()
+		resp := typhon.NewRequest(context.Background(), "POST", strings.Trim(genericEndpoint, ""), nil).Send().Response()
 		log(fmt.Sprintf("Sent POST to %s to Istio, status code: %d", genericEndpoint, resp.StatusCode))
 	}
 }
