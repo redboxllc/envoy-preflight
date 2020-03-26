@@ -68,7 +68,8 @@ func initTestingEnv() {
 // Pass in a negative integer to block but skip kill
 func initAndRun(exitCode int) {
 	initTestingEnv()
-	block()
+	blockIstio()
+	blockGenericEndpoints()
 	if exitCode >= 0 {
 		kill(exitCode)
 	}
@@ -83,7 +84,7 @@ func TestBlockingDisabled(t *testing.T) {
 	// Also try go test -timeout <seconds>s
 }
 
-// Tests block function with working envoy mock server
+// Tests blockIstio function with working envoy mock server
 func TestBlockingEnabled(t *testing.T) {
 	fmt.Println("Starting TestBlockingEnabled")
 	os.Setenv("START_WITHOUT_ENVOY", "false")
@@ -91,7 +92,7 @@ func TestBlockingEnabled(t *testing.T) {
 	initAndRun(-1)
 }
 
-// Tests block function with envoy mock server that fails for 15 seconds, then works
+// Tests blockIstio function with envoy mock server that fails for 15 seconds, then works
 func TestSlowEnvoy(t *testing.T) {
 	fmt.Println("Starting TestSlowEnvoy")
 	os.Setenv("START_WITHOUT_ENVOY", "false")
@@ -106,6 +107,16 @@ func TestGenericQuitEndpoints(t *testing.T) {
 	os.Setenv("START_WITHOUT_ENVOY", "true")
 	// URLs dont matter, just need something that will generate an HTTP response
 	os.Setenv("GENERIC_QUIT_ENDPOINTS", " https://google.com/, https://github.com/ ")
+	envoyDelayTimestamp = time.Now().Unix()
+	initAndRun(1)
+}
+
+// Tests blockGenericEndpoint function
+func TestBlockGenericEndpoint(t *testing.T) {
+	fmt.Println("Starting TestBlockGenericEndpoint")
+	os.Setenv("START_WITHOUT_ENVOY", "true")
+	// URLs dont matter, just need something that will generate an HTTP response
+	os.Setenv("GENERIC_READY_ENDPOINTS", " https://github.com/ ")
 	envoyDelayTimestamp = time.Now().Unix()
 	initAndRun(1)
 }

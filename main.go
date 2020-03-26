@@ -34,8 +34,9 @@ func main() {
 	// If an envoy API was set and config is set to wait on envoy
 	if config.EnvoyAdminAPI != "" && config.StartWithoutEnvoy == false {
 		log("Blocking until envoy starts")
-		block()
+		blockIstio()
 	}
+	blockGenericEndpoints()
 
 	if len(os.Args) < 2 {
 		log("No arguments received, exiting")
@@ -152,7 +153,7 @@ func killIstioWithPkill() {
 	}
 }
 
-func block() {
+func blockIstio() {
 	if config.StartWithoutEnvoy {
 		return
 	}
@@ -179,4 +180,32 @@ func block() {
 
 		return nil
 	}, b)
+}
+
+func blockGenericEndpoints() {
+	if len(config.GenericReadyEndpoints) == 0 {
+		return
+	}
+
+	for _, genericEndpoint := range config.GenericReadyEndpoints {
+		b := backoff.NewExponentialBackOff()
+		// We wait forever for envoy to start. In practice k8s will kill the pod if we take too long.
+		b.MaxElapsedTime = 0
+
+		_ = backoff.Retry(func() error {
+			genericEndpoint = strings.Trim(genericEndpoint, " ")
+			resp := typhon.NewRequest(context.Background(), "GET", genericEndpoint, nil).Send().Response()
+			if resp.Error != nil {
+				log(fmt.Sprintf("Sent GET to '%s', error: %s", genericEndpoint, resp.Error))
+				return resp.Error
+			}
+			log(fmt.Sprintf("Sent GET to '%s', status code: %d", genericEndpoint, resp.StatusCode))
+
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return nil
+			} else {
+				return fmt.Errorf("endpoint '%s' replied with non-ok status code: %d", genericEndpoint, resp.StatusCode)
+			}
+		}, b)
+	}
 }
