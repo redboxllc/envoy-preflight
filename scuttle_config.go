@@ -21,7 +21,7 @@ type ScuttleConfig struct {
 
 func log(message string) {
 	if config.LoggingEnabled {
-		fmt.Println("scuttle: " + message)
+		fmt.Printf("%s scuttle: %s\n", time.Now().UTC().Format("2006-01-02T15:04:05Z"), message)
 	}
 }
 
