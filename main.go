@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/cenk/backoff"
 	"github.com/monzo/typhon"
@@ -26,21 +27,29 @@ var (
 func main() {
 	config = getConfig()
 
+	if len(os.Args) < 2 {
+		log("No arguments received, exiting")
+		return
+	}
+
 	// Check if logging is enabled
 	if config.LoggingEnabled {
 		log("Logging is now enabled")
 	}
 
 	// If an envoy API was set and config is set to wait on envoy
-	if config.EnvoyAdminAPI != "" && config.StartWithoutEnvoy == false {
-		log("Blocking until envoy starts")
-		block()
-		log("Blocking finished, envoy has started")
-	}
-
-	if len(os.Args) < 2 {
-		log("No arguments received, exiting")
-		return
+	if config.EnvoyAdminAPI != "" {
+		if blockingCtx := waitForEnvoy(); blockingCtx != nil {
+			<-blockingCtx.Done()
+			err := blockingCtx.Err()
+			if err == nil || errors.Is(err, context.Canceled) {
+				log("Blocking finished, Envoy has started")
+			} else if errors.Is(err, context.DeadlineExceeded) {
+				panic(errors.New("timeout reached while waiting for Envoy to start"))
+			} else {
+				panic(err.Error())
+			}
+		}
 	}
 
 	// Find the executable the user wants to run
@@ -160,11 +169,24 @@ func killIstioWithPkill() {
 	}
 }
 
-func block() {
+func waitForEnvoy() context.Context {
 	if config.StartWithoutEnvoy {
-		return
+		return nil
+	}
+	var blockingCtx context.Context
+	var cancel context.CancelFunc
+	if config.WaitForEnvoyTimeout > time.Duration(0) {
+		blockingCtx, cancel = context.WithTimeout(context.Background(), config.WaitForEnvoyTimeout)
+	} else {
+		blockingCtx, cancel = context.WithCancel(context.Background())
 	}
 
+	log("Blocking until Envoy starts")
+	go pollEnvoy(blockingCtx, cancel)
+	return blockingCtx
+}
+
+func pollEnvoy(ctx context.Context, cancel context.CancelFunc) {
 	url := fmt.Sprintf("%s/server_info", config.EnvoyAdminAPI)
 
 	b := backoff.NewExponentialBackOff()
@@ -172,7 +194,7 @@ func block() {
 	b.MaxElapsedTime = config.WaitForEnvoyTimeout
 
 	_ = backoff.Retry(func() error {
-		rsp := typhon.NewRequest(context.Background(), "GET", url, nil).Send().Response()
+		rsp := typhon.NewRequest(ctx, "GET", url, nil).Send().Response()
 
 		info := &ServerInfo{}
 
@@ -187,4 +209,6 @@ func block() {
 
 		return nil
 	}, b)
+	// Notify the context that it's done, if it has not already been cancelled
+	cancel()
 }

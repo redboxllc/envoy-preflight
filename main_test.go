@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -68,7 +70,17 @@ func initTestingEnv() {
 // Pass in a negative integer to block but skip kill
 func initAndRun(exitCode int) {
 	initTestingEnv()
-	block()
+	if blockingCtx := waitForEnvoy(&config); blockingCtx != nil {
+		<-blockingCtx.Done()
+		err := blockingCtx.Err()
+		if err == nil || errors.Is(err, context.Canceled) {
+			log("Blocking finished, Envoy has started")
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			panic(errors.New("timeout reached while waiting for Envoy to start"))
+		} else {
+			panic(err.Error())
+		}
+	}
 	if exitCode >= 0 {
 		kill(exitCode)
 	}
