@@ -92,7 +92,7 @@ func getBoolFromEnv(name string, defaultVal bool, logEnabled bool) bool {
 	if logEnabled {
 		log(fmt.Sprintf("%s: %s", name, userVal))
 	}
-	return (userVal == "true")
+	return userVal == "true"
 }
 
 func getDurationFromEnv(name string, defaultVal time.Duration, logEnabled bool) time.Duration {
