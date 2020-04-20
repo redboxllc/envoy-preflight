@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+<<<<<<< HEAD
 	"errors"
+=======
+>>>>>>> 7edf06d... Fix typo in main_test.go
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -33,7 +36,7 @@ func initTestingEnv() {
 		return
 	}
 
-	fmt.Println("Initing test HTTP servers")
+	fmt.Println("Initiating test HTTP servers")
 
 	// Always 200 and live envoy state
 	goodServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +136,7 @@ func TestNoQuitQuitQuitResponse(t *testing.T) {
 }
 
 // Tests scuttle does not fail when the /quitquitquit endpoint is not a valid URL
-func TestNoQuitQuitQuitMalformattedUrl(t *testing.T) {
+func TestNoQuitQuitQuitMalformedUrl(t *testing.T) {
 	fmt.Println("Starting TestNoQuitQuitQuitMalformattedUrl")
 	os.Setenv("START_WITHOUT_ENVOY", "false")
 	os.Setenv("ISTIO_QUIT_API", "notaurl^^")
