@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-<<<<<<< HEAD
 	"errors"
-=======
->>>>>>> 7edf06d... Fix typo in main_test.go
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -73,7 +70,7 @@ func initTestingEnv() {
 // Pass in a negative integer to block but skip kill
 func initAndRun(exitCode int) {
 	initTestingEnv()
-	if blockingCtx := waitForEnvoy(&config); blockingCtx != nil {
+	if blockingCtx := waitForEnvoy(); blockingCtx != nil {
 		<-blockingCtx.Done()
 		err := blockingCtx.Err()
 		if err == nil || errors.Is(err, context.Canceled) {
@@ -142,4 +139,25 @@ func TestNoQuitQuitQuitMalformedUrl(t *testing.T) {
 	os.Setenv("ISTIO_QUIT_API", "notaurl^^")
 	initTestingEnv()
 	killIstioWithAPI()
+}
+
+// Tests scuttle waits
+func TestWaitTillTimeoutForEnvoy(t *testing.T) {
+	fmt.Println("Starting TestWaitTillTimeoutForEnvoy")
+	os.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "500ms")
+	os.Setenv("ENVOY_ADMIN_API", badServer.URL)
+	dur, _ := time.ParseDuration("500ms")
+	config.QuitWithoutEnvoyTimeout = dur
+	blockingCtx := waitForEnvoy()
+	if blockingCtx == nil {
+		t.Fatal("Blocking context was nil")
+	}
+	select {
+	case <-time.After(1 * time.Second):
+		t.Fatal("Context did not timeout")
+	case <-blockingCtx.Done():
+		if !errors.Is(blockingCtx.Err(), context.Canceled) {
+			t.Fatalf("Context contains wrong error: %s", blockingCtx.Err())
+		}
+	}
 }
