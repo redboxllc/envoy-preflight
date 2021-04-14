@@ -9,7 +9,15 @@ import (
 
 // ScuttleConfig ... represents Scuttle's configuration based on environment variables or defaults.
 type ScuttleConfig struct {
-	LoggingEnabled          bool
+	LoggingEnabled           bool
+	Mode				     string
+	ReadinessEndpoints		 []string
+	ReadinessMaxPollTime	 time.Duration
+	ReadinessTimeout		 time.Duration
+	StopEndpoints			 []string
+	StopSkipOnFailure   	 bool
+
+	// Deprecated
 	EnvoyAdminAPI           string
 	StartWithoutEnvoy       bool
 	WaitForEnvoyTimeout     time.Duration
@@ -27,23 +35,43 @@ func log(message string) {
 	}
 }
 
+// Gets the ScuttleConfig, first using any defined configuration modes
+// If no configuration mode is set, Environment Variables are used instead
 func getConfig() ScuttleConfig {
+	// Create base config, which will be overriden by a mode and explicitly
+	// set env vars later
 	loggingEnabled := getBoolFromEnv("SCUTTLE_LOGGING", true, false)
 	config := ScuttleConfig{
-		// Logging enabled by default, disabled if "false"
-		LoggingEnabled:          loggingEnabled,
-		EnvoyAdminAPI:           getStringFromEnv("ENVOY_ADMIN_API", "", loggingEnabled),
-		StartWithoutEnvoy:       getBoolFromEnv("START_WITHOUT_ENVOY", false, loggingEnabled),
-		WaitForEnvoyTimeout:     getDurationFromEnv("WAIT_FOR_ENVOY_TIMEOUT", time.Duration(0), loggingEnabled),
-		IstioQuitAPI:            getStringFromEnv("ISTIO_QUIT_API", "", loggingEnabled),
-		NeverKillIstio:          getBoolFromEnv("NEVER_KILL_ISTIO", false, loggingEnabled),
-		IstioFallbackPkill:      getBoolFromEnv("ISTIO_FALLBACK_PKILL", false, loggingEnabled),
-		NeverKillIstioOnFailure: getBoolFromEnv("NEVER_KILL_ISTIO_ON_FAILURE", false, loggingEnabled),
-		GenericQuitEndpoints:    getStringArrayFromEnv("GENERIC_QUIT_ENDPOINTS", make([]string, 0), loggingEnabled),
-		QuitWithoutEnvoyTimeout: getDurationFromEnv("QUIT_WITHOUT_ENVOY_TIMEOUT", time.Duration(0), loggingEnabled),
+		LoggingEnabled: loggingEnabled,
+	}
+
+	mode := strings.ToLower(strings.Trim(getStringFromEnv("SCUTTLE_MODE", "", loggingEnabled), " "))
+	switch mode {
+	case "istio":
+		config.SetIstioDefaults()
+		config.SetEnvVars()
+	case "":
+		config.SetEnvVars()
+	default:
+		panic(fmt.Errorf("Provided Scuttle Mode is invalid: %s", mode))
 	}
 
 	return config
+}
+
+// Overrides the provided baseConfig with Istio defaults
+func (c ScuttleConfig) SetIstioDefaults() {
+	c.ReadinessEndpoints = []string{"http://127.0.0.1:15020/healthz/ready"}
+	c.StopEndpoints = []string{"http://127.0.0.1:15020/quitquitquit"}
+}
+
+// Overrides the provided baseConfig with provided Environment Variable values
+func (c ScuttleConfig) SetEnvVars() {
+	c.ReadinessEndpoints = getStringArrayFromEnv( "SCUTTLE_READINESS_ENDPOINTS", c.ReadinessEndpoints, c.LoggingEnabled)
+	c.ReadinessMaxPollTime = getDurationFromEnv(  "SCUTTLE_READINESS_MAX_POLL_TIME", c.ReadinessMaxPollTime, c.LoggingEnabled)
+	c.ReadinessTimeout = getDurationFromEnv(      "SCUTTLE_READINESS_TIMEOUT", c.ReadinessTimeout, c.LoggingEnabled)
+	c.StopEndpoints = getStringArrayFromEnv( 	  "SCUTTLE_STOP_ENDPOINTS", c.StopEndpoints, c.LoggingEnabled)
+	c.StopSkipOnFailure = getBoolFromEnv(         "SCUTTLE_STOP_SKIP_ON_FAILURE", c.StopSkipOnFailure, c.LoggingEnabled)
 }
 
 func getStringArrayFromEnv(name string, defaultVal []string, logEnabled bool) []string {
