@@ -57,6 +57,21 @@ COPY /app/ ./
 ENTRYPOINT ["scuttle", "python", "-m", "my_app"]
 ```
 
+## Development
+
+Local development+testing may be accomplished using docker, [tilt.dev](https://tilt.dev/), and [KIND](https://kind.sigs.k8s.io/).
+
+```shell
+# install docker, kind and tilt (if not yet done)
+
+# This starts a local Kubernetes IN Docker (KIND) cluster with a local container registry. Local changes
+# will trigger updates to the "scuttle" kubernetes Job.
+sh kind-with-registry.sh
+
+# Hit space to open the web UI
+tilt up
+```
+
 ## Credits
 
 Origin code is forked from the [envoy-preflight](https://github.com/monzo/envoy-preflight) project on Github, which works for envoy but not for Istio sidecars.

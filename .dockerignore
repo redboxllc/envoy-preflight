@@ -4,3 +4,4 @@ docker/
 .git/
 .gitignore
 Dockerfile
+deploy
