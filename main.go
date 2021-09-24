@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"time"
 	"syscall"
 
@@ -52,6 +53,8 @@ func main() {
 				log("Blocking finished, Envoy has started")
 			} else if errors.Is(err, context.DeadlineExceeded) && config.QuitWithoutEnvoyTimeout > time.Duration(0) {
 				log("Blocking timeout reached and Envoy has not started, exiting scuttle")
+				time.Sleep(3 * time.Second) // give some time for uel sidecar and jaeger to start, so that we can kill it
+				kill(1)
 				os.Exit(1)
 			} else if errors.Is(err, context.DeadlineExceeded) {
 				log("Blocking timeout reached and Envoy has not started, continuing with passed in executable")
@@ -61,6 +64,20 @@ func main() {
 		}
 	}
 
+	if blockingCtx := waitForReadyEndpoints(); blockingCtx != nil {
+		<-blockingCtx.Done()
+		err := blockingCtx.Err()
+		if err == nil || errors.Is(err, context.Canceled) {
+			log("Blocking finished, generic endpoints has started")
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			log("Blocking timeout reached and generic endpoints has not started, exiting scuttle")
+			time.Sleep(3 * time.Second) // give some time for uel sidecar and jaeger to start, so that we can kill it
+			kill(1)
+			os.Exit(1)
+		} else {
+			panic(err.Error())
+		}
+	}
 	// Find the executable the user wants to run
 	binary, err := exec.LookPath(os.Args[1])
 	if err != nil {
@@ -242,30 +259,51 @@ func pollEnvoy(ctx context.Context, cancel context.CancelFunc) {
 	cancel()
 }
 
-func blockGenericEndpoints() {
+func waitForReadyEndpoints() context.Context {
 	if len(config.GenericReadyEndpoints) == 0 {
-		return
+		return nil
+	}
+	var blockingCtx context.Context
+	var cancel context.CancelFunc
+	if config.QuitWithoutGenericReadyEndpointsTimeout > time.Duration(0) {
+		blockingCtx, cancel = context.WithTimeout(context.Background(), config.QuitWithoutGenericReadyEndpointsTimeout)
+	} else {
+		blockingCtx, cancel = context.WithCancel(context.Background())
 	}
 
+	log("Blocking until generic ready endpoints respond")
+	go pollReadyEndpoints(blockingCtx, cancel)
+	return blockingCtx
+}
+
+func pollReadyEndpoints(ctx context.Context, cancel context.CancelFunc) {
+	wg := sync.WaitGroup{}
 	for _, genericEndpoint := range config.GenericReadyEndpoints {
-		b := backoff.NewExponentialBackOff()
-		// We wait forever for envoy to start. In practice k8s will kill the pod if we take too long.
-		b.MaxElapsedTime = 0
+		url := strings.Trim(genericEndpoint, " ")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			b := backoff.NewExponentialBackOff()
 
-		_ = backoff.Retry(func() error {
-			genericEndpoint = strings.Trim(genericEndpoint, " ")
-			resp := typhon.NewRequest(context.Background(), "GET", genericEndpoint, nil).Send().Response()
-			if resp.Error != nil {
-				log(fmt.Sprintf("Sent GET to '%s', error: %s", genericEndpoint, resp.Error))
-				return resp.Error
-			}
-			log(fmt.Sprintf("Sent GET to '%s', status code: %d", genericEndpoint, resp.StatusCode))
+			b.MaxElapsedTime = config.QuitWithoutGenericReadyEndpointsTimeout
 
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				return nil
-			} else {
-				return fmt.Errorf("endpoint '%s' replied with non-ok status code: %d", genericEndpoint, resp.StatusCode)
-			}
-		}, b)
+			_ = backoff.Retry(func() error {
+				resp := typhon.NewRequest(ctx, "GET", url, nil).Send().Response()
+				if resp.Error != nil {
+					log(fmt.Sprintf("Sent GET to '%s', error: %s", url, resp.Error))
+					return resp.Error
+				}
+				log(fmt.Sprintf("Sent GET to '%s', status code: %d", url, resp.StatusCode))
+
+				if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+					return nil
+				} else {
+					return fmt.Errorf("endpoint '%s' replied with non-ok status code: %d", url, resp.StatusCode)
+				}
+			}, b)
+		}()
 	}
+
+	wg.Wait()
+	cancel()
 }
