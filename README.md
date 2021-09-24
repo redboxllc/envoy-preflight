@@ -23,6 +23,7 @@ When the application exits, unless `NEVER_KILL_ISTIO_ON_FAILURE` has been set an
 | `GENERIC_QUIT_ENDPOINTS`      | If provided `scuttle` will send a POST to the URL given.  Multiple URLs are supported and must be provided as a CSV string.  Should be in format `http://myendpoint.com` or `http://myendpoint.com,https://myotherendpoint.com`.  The status code response is logged (if logging is enabled) but is not used.  A 200 is treated the same as a 404 or 500. `GENERIC_QUIT_ENDPOINTS` is handled before Istio is stopped. |
 | `GENERIC_READY_ENDPOINTS`     | If provided `scuttle` will send a GET to the URL given and wait until it returns 200 OK.  Multiple URLs are supported and must be provided as a CSV string.  Should be in format `http://myendpoint.com` or `http://myendpoint.com,https://myotherendpoint.com`. `GENERIC_READN_ENDPOINTS` is handled after Istio is started. |
 | `QUIT_WITHOUT_ENVOY_TIMEOUT`  | If provided and set to a valid duration, `scuttle` will exit if Envoy does not become available before the end of the timeout and not continue with the passed in executable. If `START_WITHOUT_ENVOY` is also set, this variable will not be taken into account. Also, if `WAIT_FOR_ENVOY_TIMEOUT` is set, this variable will take precedence. |
+| `WAIT_FOR_GENERIC_READY_ENDPOINTS_TIMEOUT` | If provided and set to a valid `time.Duration` string greater than 0 seconds, `scuttle` will wait for that amount of time before starting the main application. By default, it will wait indefinitely. |
 
 ## How Scuttle stops Istio
 
