@@ -9,17 +9,18 @@ import (
 
 // ScuttleConfig ... represents Scuttle's configuration based on environment variables or defaults.
 type ScuttleConfig struct {
-	LoggingEnabled          bool
-	EnvoyAdminAPI           string
-	StartWithoutEnvoy       bool
-	WaitForEnvoyTimeout     time.Duration
-	IstioQuitAPI            string
-	NeverKillIstio          bool
-	IstioFallbackPkill      bool
-	NeverKillIstioOnFailure bool
-	GenericQuitEndpoints    []string
-	GenericReadyEndpoints   []string
-	QuitWithoutEnvoyTimeout time.Duration
+	LoggingEnabled                          bool
+	EnvoyAdminAPI                           string
+	StartWithoutEnvoy                       bool
+	WaitForEnvoyTimeout                     time.Duration
+	IstioQuitAPI                            string
+	NeverKillIstio                          bool
+	IstioFallbackPkill                      bool
+	NeverKillIstioOnFailure                 bool
+	GenericQuitEndpoints                    []string
+	GenericReadyEndpoints                   []string
+	QuitWithoutEnvoyTimeout                 time.Duration
+	QuitWithoutGenericReadyEndpointsTimeout time.Duration
 }
 
 func log(message string) {
@@ -32,17 +33,18 @@ func getConfig() ScuttleConfig {
 	loggingEnabled := getBoolFromEnv("SCUTTLE_LOGGING", true, false)
 	config := ScuttleConfig{
 		// Logging enabled by default, disabled if "false"
-		LoggingEnabled:          loggingEnabled,
-		EnvoyAdminAPI:           getStringFromEnv("ENVOY_ADMIN_API", "", loggingEnabled),
-		StartWithoutEnvoy:       getBoolFromEnv("START_WITHOUT_ENVOY", false, loggingEnabled),
-		WaitForEnvoyTimeout:     getDurationFromEnv("WAIT_FOR_ENVOY_TIMEOUT", time.Duration(0), loggingEnabled),
-		IstioQuitAPI:            getStringFromEnv("ISTIO_QUIT_API", "", loggingEnabled),
-		NeverKillIstio:          getBoolFromEnv("NEVER_KILL_ISTIO", false, loggingEnabled),
-		IstioFallbackPkill:      getBoolFromEnv("ISTIO_FALLBACK_PKILL", false, loggingEnabled),
-		NeverKillIstioOnFailure: getBoolFromEnv("NEVER_KILL_ISTIO_ON_FAILURE", false, loggingEnabled),
-		GenericQuitEndpoints:    getStringArrayFromEnv("GENERIC_QUIT_ENDPOINTS", make([]string, 0), loggingEnabled),
-		GenericReadyEndpoints:    getStringArrayFromEnv("GENERIC_READY_ENDPOINTS", make([]string, 0), loggingEnabled),
-		QuitWithoutEnvoyTimeout: getDurationFromEnv("QUIT_WITHOUT_ENVOY_TIMEOUT", time.Duration(0), loggingEnabled),
+		LoggingEnabled:                          loggingEnabled,
+		EnvoyAdminAPI:                           getStringFromEnv("ENVOY_ADMIN_API", "", loggingEnabled),
+		StartWithoutEnvoy:                       getBoolFromEnv("START_WITHOUT_ENVOY", false, loggingEnabled),
+		WaitForEnvoyTimeout:                     getDurationFromEnv("WAIT_FOR_ENVOY_TIMEOUT", time.Duration(0), loggingEnabled),
+		IstioQuitAPI:                            getStringFromEnv("ISTIO_QUIT_API", "", loggingEnabled),
+		NeverKillIstio:                          getBoolFromEnv("NEVER_KILL_ISTIO", false, loggingEnabled),
+		IstioFallbackPkill:                      getBoolFromEnv("ISTIO_FALLBACK_PKILL", false, loggingEnabled),
+		NeverKillIstioOnFailure:                 getBoolFromEnv("NEVER_KILL_ISTIO_ON_FAILURE", false, loggingEnabled),
+		GenericQuitEndpoints:                    getStringArrayFromEnv("GENERIC_QUIT_ENDPOINTS", make([]string, 0), loggingEnabled),
+		GenericReadyEndpoints:                   getStringArrayFromEnv("GENERIC_READY_ENDPOINTS", make([]string, 0), loggingEnabled),
+		QuitWithoutEnvoyTimeout:                 getDurationFromEnv("QUIT_WITHOUT_ENVOY_TIMEOUT", time.Duration(0), loggingEnabled),
+		QuitWithoutGenericReadyEndpointsTimeout: getDurationFromEnv("QUIT_WITHOUT_GENERIC_READY_ENDPOINTS_TIMEOUT", time.Duration(0), loggingEnabled),
 	}
 
 	return config
