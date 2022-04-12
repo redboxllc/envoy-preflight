@@ -1,0 +1,43 @@
+format_version: '10'
+common:
+  serviceBuild: &serviceBuild
+    - build:
+        clean_workspace: true
+        jobs:
+          Build:
+            elastic_profile_id: gocd-test-agent-dind
+            artifacts:
+              - build:
+                  source: cruise-output/buildReport*.json
+              - build:
+                  source: devBranchRevision.json
+            tasks:
+              - script: |
+                  git clone git@github.com:CognitiveScale/gocd-pipeline-scripts.git
+                  ./gocd-pipeline-scripts/common/c12e-common.sh dev
+pipelines:
+  scuttle:
+    group: fabric6
+    materials:
+      scuttle:
+        git: git@github.com:CognitiveScale/scuttle.git
+        branch: develop
+    stages: *serviceBuild
+  scuttle-rc:
+    group: fabric6-rc
+    materials:
+      scuttle:
+        git: git@github.com:CognitiveScale/scuttle.git
+        branch: main
+    stages: *serviceBuild
+  scuttle-pr:
+    group: pull-requests
+    materials:
+      scuttle:
+        plugin_configuration:
+          id: github.pr
+          version: 1
+        options:
+          url: git@github.com:CognitiveScale/scuttle.git
+          defaultBranch: develop
+    stages: *serviceBuild

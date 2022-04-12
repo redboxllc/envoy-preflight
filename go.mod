@@ -1,4 +1,4 @@
-module github.com/redboxllc/scuttle
+module github.com/CognitiveScale/scuttle
 
 go 1.17
 

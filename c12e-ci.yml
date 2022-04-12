@@ -1,0 +1,3 @@
+builder:
+  image: golang:1.17.8
+  command: "true"
