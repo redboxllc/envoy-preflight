@@ -3,17 +3,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
-	"time"
 	"syscall"
+	"time"
 
 	"github.com/cenk/backoff"
-	"github.com/monzo/typhon"
 )
 
 // ServerInfo ... represents the response from Envoy's server info endpoint
@@ -25,7 +26,10 @@ type ServerInfo struct {
 var Version = "vlocal"
 
 var (
-	config ScuttleConfig
+	config     ScuttleConfig
+	httpClient = &http.Client{
+		Timeout: 30 * time.Second,
+	}
 )
 
 func main() {
@@ -70,11 +74,11 @@ func main() {
 	var proc *os.Process
 	stop := make(chan os.Signal, 2)
 	signal.Notify(stop, syscall.SIGINT) // Only listen to SIGINT until after child proc starts
-	
+
 	// Pass signals to the child process
 	// This takes an OS signal and passes to the child process scuttle starts (proc)
 	go func() {
-		
+
 		for sig := range stop {
 			if sig == syscall.SIGURG {
 				// SIGURG is used by Golang for it's own purposes, ignore it as these signals
@@ -87,7 +91,7 @@ func main() {
 			} else {
 				// Proc is not null, so the child process is running and should also receive this signal
 				log(fmt.Sprintf("Received signal '%v', passing to child", sig))
-				proc.Signal(sig)
+				_ = proc.Signal(sig)
 			}
 		}
 	}()
@@ -113,6 +117,19 @@ func main() {
 	kill(exitCode)
 
 	os.Exit(exitCode)
+}
+
+func executeHttpRequest(ctx context.Context, method, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func kill(exitCode int) {
@@ -145,13 +162,16 @@ func killGenericEndpoints() {
 		return
 	}
 
+	ctx := context.Background()
+
 	for _, genericEndpoint := range config.GenericQuitEndpoints {
 		genericEndpoint = strings.Trim(genericEndpoint, " ")
-		resp := typhon.NewRequest(context.Background(), "POST", genericEndpoint, nil).Send().Response()
-		if resp.Error != nil {
-			log(fmt.Sprintf("Sent POST to '%s', error: %s", genericEndpoint, resp.Error))
+		resp, err := executeHttpRequest(ctx, "POST", genericEndpoint)
+		if err != nil {
+			log(fmt.Sprintf("Sent POST to '%s', error: %s", genericEndpoint, err))
 			continue
 		}
+		_ = resp.Body.Close()
 		log(fmt.Sprintf("Sent POST to '%s', status code: %d", genericEndpoint, resp.StatusCode))
 	}
 }
@@ -160,11 +180,11 @@ func killIstioWithAPI() {
 	log(fmt.Sprintf("Stopping Istio using Istio API '%s' (intended for Istio >v1.2)", config.IstioQuitAPI))
 
 	url := fmt.Sprintf("%s/quitquitquit", config.IstioQuitAPI)
-	resp := typhon.NewRequest(context.Background(), "POST", url, nil).Send().Response()
-	responseSuccess := false
 
-	if resp.Error != nil {
-		log(fmt.Sprintf("Sent quitquitquit to Istio, error: %d", resp.Error))
+	responseSuccess := false
+	resp, err := executeHttpRequest(context.Background(), "POST", url)
+	if err != nil {
+		log(fmt.Sprintf("Sent quitquitquit to Istio, error: %d", err))
 	} else {
 		log(fmt.Sprintf("Sent quitquitquit to Istio, status code: %d", resp.StatusCode))
 		responseSuccess = resp.StatusCode == 200
@@ -221,11 +241,18 @@ func pollEnvoy(ctx context.Context, cancel context.CancelFunc) {
 
 	_ = backoff.Retry(func() error {
 		pollCount++
-		rsp := typhon.NewRequest(ctx, "GET", url, nil).Send().Response()
+		rsp, err := executeHttpRequest(ctx, "GET", url)
+		if err != nil {
+			log(fmt.Sprintf("Polling Envoy (%d), error: %s", pollCount, err))
+			return err
+		}
+		defer func() {
+			_ = rsp.Body.Close()
+		}()
 
 		info := &ServerInfo{}
 
-		err := rsp.Decode(info)
+		err = json.NewDecoder(rsp.Body).Decode(info)
 		if err != nil {
 			log(fmt.Sprintf("Polling Envoy (%d), error: %s", pollCount, err))
 			return err
