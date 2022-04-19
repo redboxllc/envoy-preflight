@@ -23,13 +23,6 @@ pipelines:
     materials:
       scuttle:
         git: git@github.com:CognitiveScale/scuttle.git
-        branch: develop
-    stages: *serviceBuild
-  scuttle-rc:
-    group: fabric6-rc
-    materials:
-      scuttle:
-        git: git@github.com:CognitiveScale/scuttle.git
         branch: main
     stages: *serviceBuild
   scuttle-pr:
@@ -41,5 +34,5 @@ pipelines:
           version: 1
         options:
           url: git@github.com:CognitiveScale/scuttle.git
-          defaultBranch: develop
+          defaultBranch: main
     stages: *serviceBuild
