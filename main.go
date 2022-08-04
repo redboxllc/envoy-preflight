@@ -9,8 +9,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
-	"time"
 	"syscall"
+	"time"
 
 	"github.com/cenk/backoff"
 	"github.com/monzo/typhon"
@@ -70,11 +70,11 @@ func main() {
 	var proc *os.Process
 	stop := make(chan os.Signal, 2)
 	signal.Notify(stop, syscall.SIGINT) // Only listen to SIGINT until after child proc starts
-	
+
 	// Pass signals to the child process
 	// This takes an OS signal and passes to the child process scuttle starts (proc)
 	go func() {
-		
+
 		for sig := range stop {
 			if sig == syscall.SIGURG {
 				// SIGURG is used by Golang for it's own purposes, ignore it as these signals
@@ -118,6 +118,8 @@ func main() {
 func kill(exitCode int) {
 	var logLineUnformatted = "Kill received: (Action: %s, Reason: %s, Exit Code: %d)"
 	switch {
+	case config.GenericQuitOnly:
+		killGenericEndpoints()
 	case config.EnvoyAdminAPI == "":
 		log(fmt.Sprintf(logLineUnformatted, "Skipping Istio kill", "ENVOY_ADMIN_API not set", exitCode))
 	case !strings.Contains(config.EnvoyAdminAPI, "127.0.0.1") && !strings.Contains(config.EnvoyAdminAPI, "localhost"):
