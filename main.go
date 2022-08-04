@@ -118,6 +118,8 @@ func main() {
 func kill(exitCode int) {
 	var logLineUnformatted = "Kill received: (Action: %s, Reason: %s, Exit Code: %d)"
 	switch {
+	case config.GenericQuitOnly:
+		killGenericEndpoints()
 	case config.EnvoyAdminAPI == "":
 		log(fmt.Sprintf(logLineUnformatted, "Skipping Istio kill", "ENVOY_ADMIN_API not set", exitCode))
 	case !strings.Contains(config.EnvoyAdminAPI, "127.0.0.1") && !strings.Contains(config.EnvoyAdminAPI, "localhost"):

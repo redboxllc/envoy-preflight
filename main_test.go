@@ -165,6 +165,23 @@ func TestGenericQuitEndpoints(t *testing.T) {
 	clearTestingEnv()
 }
 
+// Tests GenericQuitOnly triggers GenericQuitEndpoints
+func TestGenericQuitOnly(t *testing.T) {
+	var quitEndpointCalled bool
+	fmt.Println("Starting TestGenericQuitOnly")
+	checkCallServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		quitEndpointCalled = true
+	}))
+	os.Setenv("GENERIC_QUIT_ONLY", "true")
+	os.Setenv("GENERIC_QUIT_ENDPOINTS", fmt.Sprintf("http://%s", checkCallServer.Listener.Addr().String()))
+	initTestingEnv()
+	kill(0)
+	if quitEndpointCalled == false {
+		t.Error("Expected GENERIC_QUIT_ONLY to trigger GENERIC_QUIT_ENDPOINTS")
+	}
+	checkCallServer.Close()
+}
+
 // Tests scuttle does not fail when the /quitquitquit endpoint does not return a response
 func TestNoQuitQuitQuitResponse(t *testing.T) {
 	fmt.Println("Starting TestNoQuitQuitQuitResponse")

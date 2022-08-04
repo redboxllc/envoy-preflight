@@ -23,6 +23,7 @@ type ScuttleConfig struct {
 	GenericQuitEndpoints    []string
 	QuitRequestTimeout      time.Duration
 	QuitWithoutEnvoyTimeout time.Duration
+	GenericQuitOnly         bool
 }
 
 func log(message string) {
@@ -45,6 +46,7 @@ func getConfig() ScuttleConfig {
 		GenericQuitEndpoints:    getStringArrayFromEnv("GENERIC_QUIT_ENDPOINTS", make([]string, 0), loggingEnabled),
 		QuitRequestTimeout:      getDurationFromEnv("QUIT_REQUEST_TIMEOUT", time.Second*5, loggingEnabled),
 		QuitWithoutEnvoyTimeout: getDurationFromEnv("QUIT_WITHOUT_ENVOY_TIMEOUT", time.Duration(0), loggingEnabled),
+		GenericQuitOnly:         getBoolFromEnv("GENERIC_QUIT_ONLY", false, loggingEnabled),
 	}
 
 	if config.IstioQuitAPI == "" {
