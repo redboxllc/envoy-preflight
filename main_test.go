@@ -133,6 +133,8 @@ func TestGenericQuitOnly(t *testing.T) {
 	os.Setenv("GENERIC_QUIT_ONLY", "true")
 	os.Setenv("GENERIC_QUIT_ENDPOINTS", fmt.Sprintf("http://%s", checkCallServer.Listener.Addr().String()))
 	initTestingEnv()
+	os.Unsetenv("GENERIC_QUIT_ONLY")
+	os.Unsetenv("GENERIC_QUIT_ENDPOINTS")
 	kill(0)
 	if quitEndpointCalled == false {
 		t.Error("Expected GENERIC_QUIT_ONLY to trigger GENERIC_QUIT_ENDPOINTS")
