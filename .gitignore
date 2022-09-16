@@ -1,3 +1,4 @@
-**/envoy-preflight
 scuttle
 .vscode/*
+scuttle.bbprojectd
+.DS_Store
