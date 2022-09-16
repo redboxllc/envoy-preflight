@@ -6,50 +6,62 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v1
       # On tag, get tag version without v (e.g. v1.0.0 -> 1.0.0, v1.1.1-beta -> 1.1.1-beta)
       - name: Get tag version
         id: get_version
         run: |
           if [[ $GITHUB_REF == "refs/tags/v"* ]]; then
             echo "Found release tag"
-            VERSION=${GITHUB_REF/refs\/tags\/v}
+            VERSION=${GITHUB_REF_NAME/v}
+            IS_RELEASE=true
           else
             echo "No release tag found"
             VERSION="local-build-only"
+            IS_RELEASE=false
           fi
           echo "Using version: $VERSION"
+          echo "Is relase:     $IS_RELEASE"
           echo ::set-output name=VERSION::$VERSION
-      # Build and test binary
+          echo ::set-output name=IS_RELEASE::$IS_RELEASE
+      - name: Checkout
+        uses: actions/checkout@v3
       - name: Build and Test Binary
         env:
           CGO_ENABLED: 0
+          GOOS: linux
         run: |
           go mod download
-          go test -test.timeout 30s 
-          GOOS=linux GOARCH=amd64 go build -o build/linux/amd64/scuttle -ldflags="-X 'main.Version=${{ steps.get_version.outputs.VERSION }}'"
-      # Build Docker image
-      # On tag, push Docker image
-      - name: Build Docker Image
-        uses: docker/build-push-action@v1
+          go test -test.timeout 30s
+
+          mkdir -p build/artifacts
+          for arch in amd64 arm64
+          do
+            GOARCH=$arch go build -o build/linux/$arch/scuttle -ldflags="-X 'main.Version=${{ steps.get_version.outputs.VERSION }}'"
+            zip -r -j build/artifacts/scuttle-linux-$arch.zip build/linux/$arch/
+          done
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        id: buildx
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
-          repository: redboxoss/scuttle
-          tags: latest,${{ steps.get_version.outputs.VERSION }}
-          push: ${{ startsWith(github.ref, 'refs/tags/') }}
-          build_args: VERSION=${{ steps.get_version.outputs.VERSION }}
-      # On tag, Pack zip of scuttle for GitHub Release
-      - name: Pack
-        run: |
-          mkdir build/artifacts 
-          zip -r -j build/artifacts/scuttle-linux-amd64.zip build/linux/amd64/
-        if: startsWith(github.ref, 'refs/tags/')
-      # On tag, Create GitHub Release
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+      - name: Build Docker Image
+        uses: docker/build-push-action@v3
+        with:
+          build-args: VERSION=${{ steps.get_version.outputs.VERSION }}
+          builder: ${{ steps.buildx.outputs.name }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ steps.get_version.outputs.IS_RELEASE }}
+          tags: |
+            redboxllc/scuttle:latest
+            redboxllc/scuttle:${{ steps.get_version.outputs.VERSION }}
       - name: Release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
+        if: ${{ steps.get_version.outputs.IS_RELEASE == 'true' }}
         with:
           files: build/artifacts/*.zip
         env:
