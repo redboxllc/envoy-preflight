@@ -7,10 +7,10 @@ github.com/deckarep/golang-set
 # github.com/fortytw2/leaktest v1.3.0
 ## explicit
 # github.com/golang/protobuf v1.4.2
-## explicit
+## explicit; go 1.9
 github.com/golang/protobuf/proto
 # github.com/monzo/slog v0.0.0-20200629180744-4e22e890d327
-## explicit
+## explicit; go 1.13
 github.com/monzo/slog
 # github.com/monzo/terrors v0.0.0-20191030112059-325b9ec5dcdf
 ## explicit
@@ -21,22 +21,25 @@ github.com/monzo/terrors/stack
 ## explicit
 github.com/monzo/typhon
 # github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
+## explicit
 github.com/nu7hatch/gouuid
 # github.com/stretchr/testify v1.6.1
-## explicit
+## explicit; go 1.13
 # golang.org/x/net v0.0.0-20200707034311-ab3426394381
-## explicit
+## explicit; go 1.11
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/h2c
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 # golang.org/x/text v0.3.0
+## explicit
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 # google.golang.org/protobuf v1.23.0
+## explicit; go 1.9
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire
 google.golang.org/protobuf/internal/descfmt
