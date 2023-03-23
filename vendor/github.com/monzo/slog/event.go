@@ -66,8 +66,8 @@ func (e Event) String() string {
 		}
 	}
 
-	return fmt.Sprintf("[%s] %s %s (error=%v metadata=%v labels=%v id=%s)", errorMessage, e.Timestamp.Format(TimeFormat),
-		e.Severity.String(), e.Message, e.Metadata, e.Labels, e.Id)
+	return fmt.Sprintf("[%s] %s %s (error=%v metadata=%v labels=%v id=%s)", e.Timestamp.Format(TimeFormat),
+		e.Severity.String(), e.Message, errorMessage, e.Metadata, e.Labels, e.Id)
 }
 
 // Eventf constructs an event from the given message string and formatting operands. Optionally, event metadata

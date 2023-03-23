@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -21,7 +22,8 @@ const (
 
 var httpChunkBufPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 32*1024) // size is the same as io.Copy uses internally
+		buf := make([]byte, 32*1024) // size is the same as io.Copy uses internally
+		return &buf
 	}}
 
 func isStreamingRsp(rsp Response) bool {
@@ -61,6 +63,13 @@ func isStreamingRsp(rsp Response) bool {
 // example, a client may disconnect before the response body is copied to it; this doesn't mean the server is
 // misbehaving.
 func copyErrSeverity(err error) slog.Severity {
+
+	switch {
+	case strings.HasSuffix(err.Error(), "read on closed response body"),
+		strings.HasSuffix(err.Error(), "connection reset by peer"):
+		return slog.DebugSeverity
+	}
+
 	// Annoyingly, these errors can be deeply nested; &net.OpError{&os.SyscallError{syscall.Errno}}
 	switch err := err.(type) {
 	case syscall.Errno:
@@ -105,16 +114,21 @@ func HttpHandler(svc Service) http.Handler {
 		rw.WriteHeader(rsp.StatusCode)
 		if rsp.Body != nil {
 			defer rsp.Body.Close()
-			buf := httpChunkBufPool.Get().([]byte)
-			defer httpChunkBufPool.Put(buf)
+			buf := *httpChunkBufPool.Get().(*[]byte)
+			defer httpChunkBufPool.Put(&buf)
 			if isStreamingRsp(rsp) {
 				// Streaming responses use copyChunked(), which takes care of flushing transparently
 				if _, err := copyChunked(rw, rsp.Body, buf); err != nil {
-					slog.Log(slog.Eventf(copyErrSeverity(err), req, "Couldn't send streaming response body: %v", err))
+					slog.Log(slog.Eventf(copyErrSeverity(err), req, "Couldn't send streaming response body", err))
+
+					// Prevent the client from accidentally consuming a truncated stream by aborting the response.
+					// The official way of interrupting an HTTP reply mid-stream is panic(http.ErrAbortHandler), which
+					// works for both HTTP/1.1 and HTTP.2. https://github.com/golang/go/issues/17790
+					panic(http.ErrAbortHandler)
 				}
 			} else {
 				if _, err := io.CopyBuffer(rw, rsp.Body, buf); err != nil {
-					slog.Log(slog.Eventf(copyErrSeverity(err), req, "Couldn't send response body: %v", err))
+					slog.Log(slog.Eventf(copyErrSeverity(err), req, "Couldn't send response body", err))
 				}
 			}
 		}
