@@ -6,18 +6,33 @@ import (
 	"github.com/monzo/terrors/stack"
 )
 
-var retryable bool = true
-var notRetryable bool = false
+var (
+	// Used when setting Error.IsRetryable
+	retryable    = true
+	notRetryable = false
+	// Used when setting Error.IsUnexpected
+	unexpected    = true
+	notUnexpected = false
+)
 
 // Wrap takes any error interface and wraps it into an Error.
 // This is useful because an Error contains lots of useful goodies, like the stacktrace of the error.
 // NOTE: If `err` is already an `Error`, it will add the params passed in to the params of the Error
+// Deprecated: Use Augment instead.
 func Wrap(err error, params map[string]string) error {
 	return WrapWithCode(err, params, ErrInternalService)
 }
 
 // WrapWithCode wraps an error with a custom error code. If `err` is already
 // an `Error`, it will add the params passed in to the params of the error
+// Deprecated: Use Augment instead. If you need to set the code of the error,
+// then you should return a new error instead. For example
+//
+//	terrors.WrapWithCode(err, map[string]string{"foo": "bar"}, "bad_request.failed")
+//
+// would become
+//
+//	terrors.BadRequest("failed", err.Error(), map[string]string{"foo": "bar"})
 func WrapWithCode(err error, params map[string]string, code string) error {
 	if err == nil {
 		return nil
@@ -32,9 +47,22 @@ func WrapWithCode(err error, params map[string]string, code string) error {
 
 // InternalService creates a new error to represent an internal service error.
 // Only use internal service error if we know very little about the error. Most
-// internal service errors will come from `Wrap`ing a vanilla `error` interface
+// internal service errors will come from `Wrap`ing a vanilla `error` interface.
+// Errors returned by this function are considered to be retryable by default.
+// Consider using NonRetryableInternalService if retries are not desirable.
 func InternalService(code, message string, params map[string]string) *Error {
 	return errorFactory(errCode(ErrInternalService, code), message, params)
+}
+
+// NonRetryableInternalService creates a new error to represent an internal service error.
+// Only use internal service error if we know very little about the error. Most
+// internal service errors will come from `Wrap`ing a vanilla `error` interface.
+// Errors returned by this function are not considered to be retryable by default.
+func NonRetryableInternalService(code, message string, params map[string]string) *Error {
+	err := InternalService(code, message, params)
+	err.SetIsRetryable(false)
+
+	return err
 }
 
 // BadRequest creates a new error to represent an error caused by the client sending
@@ -89,9 +117,10 @@ func RateLimited(code, message string, params map[string]string) *Error {
 // Builds a stack based on the current call stack
 func errorFactory(code string, message string, params map[string]string) *Error {
 	err := &Error{
-		Code:    ErrUnknown,
-		Message: message,
-		Params:  map[string]string{},
+		Code:         ErrUnknown,
+		Message:      message,
+		Params:       map[string]string{},
+		IsUnexpected: &notUnexpected,
 	}
 	if len(code) > 0 {
 		err.Code = code
