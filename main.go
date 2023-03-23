@@ -9,10 +9,10 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
-	"time"
 	"syscall"
+	"time"
 
-	"github.com/cenk/backoff"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/monzo/typhon"
 )
 
@@ -70,11 +70,11 @@ func main() {
 	var proc *os.Process
 	stop := make(chan os.Signal, 2)
 	signal.Notify(stop, syscall.SIGINT) // Only listen to SIGINT until after child proc starts
-	
+
 	// Pass signals to the child process
 	// This takes an OS signal and passes to the child process scuttle starts (proc)
 	go func() {
-		
+
 		for sig := range stop {
 			if sig == syscall.SIGURG {
 				// SIGURG is used by Golang for it's own purposes, ignore it as these signals
@@ -219,7 +219,7 @@ func pollEnvoy(ctx context.Context, cancel context.CancelFunc) {
 		b.MaxElapsedTime = config.QuitWithoutEnvoyTimeout
 	}
 
-	_ = backoff.Retry(func() error {
+	err := backoff.Retry(func() error {
 		pollCount++
 		rsp := typhon.NewRequest(ctx, "GET", url, nil).Send().Response()
 
@@ -238,6 +238,12 @@ func pollEnvoy(ctx context.Context, cancel context.CancelFunc) {
 
 		return nil
 	}, b)
+
+	// Ensure context exceeds deadline when exponential backoff gives up before MaxElapsedTime is reached.
+	if err != nil && b.MaxElapsedTime > time.Duration(0) {
+		time.Sleep(b.MaxElapsedTime)
+	}
+
 	// Notify the context that it's done, if it has not already been cancelled
 	cancel()
 }
