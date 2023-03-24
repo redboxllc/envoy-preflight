@@ -1,4 +1,4 @@
-module github.com/redboxllc/scuttle
+module github.com/kvij/scuttle
 
 go 1.14
 

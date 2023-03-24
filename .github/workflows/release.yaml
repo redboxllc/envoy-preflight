@@ -36,7 +36,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-          repository: redboxoss/scuttle
+          repository: kvij/scuttle
           tags: latest,${{ steps.get_version.outputs.VERSION }}
           push: ${{ startsWith(github.ref, 'refs/tags/') }}
           build_args: VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -52,5 +52,3 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: build/artifacts/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
