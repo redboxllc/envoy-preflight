@@ -20,7 +20,7 @@ jobs:
             VERSION="local-build-only"
           fi
           echo "Using version: $VERSION"
-          echo ::set-output name=VERSION::$VERSION
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
       # Build and test binary
       - name: Build and Test Binary
         env:
