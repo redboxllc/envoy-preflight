@@ -65,6 +65,15 @@ func initTestingEnv() {
 	testsInit = true
 }
 
+// Reset all the environment variables
+func clearTestingEnv() {
+	os.Setenv("START_WITHOUT_ENVOY", "")
+	os.Setenv("ENVOY_ADMIN_API", "")
+	os.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "")
+	os.Setenv("WAIT_FOR_ENVOY_TIMEOUT", "")
+	os.Setenv("GENERIC_QUIT_ENDPOINTS","")
+}
+
 // Inits the test environment and starts the blocking
 // Set any env variables for your specific tests prior to calling this
 // Pass in a negative integer to block but skip kill
@@ -73,6 +82,7 @@ func initAndRun(exitCode int) {
 	if blockingCtx := waitForEnvoy(); blockingCtx != nil {
 		<-blockingCtx.Done()
 		err := blockingCtx.Err()
+		defer clearTestingEnv()
 		if err == nil || errors.Is(err, context.Canceled) {
 			log("Blocking finished, Envoy has started")
 		} else if errors.Is(err, context.DeadlineExceeded) {
@@ -115,38 +125,47 @@ func TestSlowEnvoy(t *testing.T) {
 // Tests generic quit endpoints are sent
 func TestGenericQuitEndpoints(t *testing.T) {
 	fmt.Println("Starting TestGenericQuitEndpoints")
+	os.Setenv("START_WITHOUT_ENVOY", "false")
+	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
 	// Valid URLs dont matter, just need something that will generate an HTTP response
 	// 127.0.0.1:1111/idontexist is to verify we don't panic if a nonexistent URL is given
 	// notaurl^^ is to verify a malformatted URL does not result in panic
 	os.Setenv("GENERIC_QUIT_ENDPOINTS", "https://google.com/, https://github.com/, 127.0.0.1:1111/idontexist, notaurl^^ ")
 	initTestingEnv()
 	killGenericEndpoints()
+	clearTestingEnv()
 }
 
 // Tests scuttle does not fail when the /quitquitquit endpoint does not return a response
 func TestNoQuitQuitQuitResponse(t *testing.T) {
 	fmt.Println("Starting TestNoQuitQuitQuitResponse")
 	os.Setenv("START_WITHOUT_ENVOY", "false")
+	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
 	os.Setenv("ISTIO_QUIT_API", "127.0.0.1:1111/idontexist")
 	initTestingEnv()
 	killIstioWithAPI()
+	clearTestingEnv()
 }
 
 // Tests scuttle does not fail when the /quitquitquit endpoint is not a valid URL
 func TestNoQuitQuitQuitMalformedUrl(t *testing.T) {
 	fmt.Println("Starting TestNoQuitQuitQuitMalformedUrl")
 	os.Setenv("START_WITHOUT_ENVOY", "false")
+	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
 	os.Setenv("ISTIO_QUIT_API", "notaurl^^")
 	initTestingEnv()
 	killIstioWithAPI()
+	clearTestingEnv()
 }
 
 // Tests scuttle waits
 func TestWaitTillTimeoutForEnvoy(t *testing.T) {
 	fmt.Println("Starting TestWaitTillTimeoutForEnvoy")
+	os.Setenv("START_WITHOUT_ENVOY", "false")
 	os.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "500ms")
 	os.Setenv("ENVOY_ADMIN_API", badServer.URL)
 	initTestingEnv()
+	defer clearTestingEnv()
 	dur, _ := time.ParseDuration("500ms")
 	config.QuitWithoutEnvoyTimeout = dur
 	blockingCtx := waitForEnvoy()
@@ -166,9 +185,11 @@ func TestWaitTillTimeoutForEnvoy(t *testing.T) {
 // Tests scuttle will continue after WAIT_FOR_ENVOY_TIMEOUT expires and envoy is not ready
 func TestWaitForEnvoyTimeoutContinueWithoutEnvoy(t *testing.T) {
 	fmt.Println("Starting TestWaitForEnvoyTimeoutContinueWithoutEnvoy")
+	os.Setenv("START_WITHOUT_ENVOY", "false")
 	os.Setenv("WAIT_FOR_ENVOY_TIMEOUT", "5s")
 	os.Setenv("ENVOY_ADMIN_API", badServer.URL)
 	initTestingEnv()
+	defer clearTestingEnv()
 	blockingCtx := waitForEnvoy()
 	<-blockingCtx.Done()
 	err := blockingCtx.Err()
