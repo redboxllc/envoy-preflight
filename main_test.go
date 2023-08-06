@@ -16,23 +16,16 @@ var (
 	goodEventuallyServer *httptest.Server
 	badServer            *httptest.Server
 	genericQuitServer    *httptest.Server
-	testsInit            bool  = false
 	envoyDelayTimestamp  int64 = 0
 	envoyDelayMax        int64 = 15
 )
 
-// Sets up minimum env variables and mock http servers
-// Can be called multiple times, but will only init once per test session
-func initTestingEnv() {
-	// Always update env variables for new test
-	os.Setenv("SCUTTLE_LOGGING", "true")
-	config = getConfig()
+func TestMain(m *testing.M) {
+	initTestHTTPServers()
+	os.Exit(m.Run())
+}
 
-	// Do not restart http servers for each test
-	if testsInit {
-		return
-	}
-
+func initTestHTTPServers() {
 	fmt.Println("Initiating test HTTP servers")
 
 	// Always 200 and live envoy state
@@ -61,8 +54,13 @@ func initTestingEnv() {
 		fmt.Println("Status Ok")
 		w.WriteHeader(http.StatusOK)
 	}))
+}
 
-	testsInit = true
+// Sets up minimum env variables and sets the global config from env.
+func initTestingEnv() {
+	// Always update env variables for new test
+	os.Setenv("SCUTTLE_LOGGING", "true")
+	config = getConfig()
 }
 
 // Reset all the environment variables
@@ -71,7 +69,7 @@ func clearTestingEnv() {
 	os.Setenv("ENVOY_ADMIN_API", "")
 	os.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "")
 	os.Setenv("WAIT_FOR_ENVOY_TIMEOUT", "")
-	os.Setenv("GENERIC_QUIT_ENDPOINTS","")
+	os.Setenv("GENERIC_QUIT_ENDPOINTS", "")
 }
 
 // Inits the test environment and starts the blocking
@@ -127,10 +125,10 @@ func TestGenericQuitEndpoints(t *testing.T) {
 	fmt.Println("Starting TestGenericQuitEndpoints")
 	os.Setenv("START_WITHOUT_ENVOY", "false")
 	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
-	// Valid URLs dont matter, just need something that will generate an HTTP response
+	// Valid URLs don't matter, just need something that will generate an HTTP response
 	// 127.0.0.1:1111/idontexist is to verify we don't panic if a nonexistent URL is given
 	// notaurl^^ is to verify a malformatted URL does not result in panic
-	os.Setenv("GENERIC_QUIT_ENDPOINTS", "https://google.com/, https://github.com/, 127.0.0.1:1111/idontexist, notaurl^^ ")
+	os.Setenv("GENERIC_QUIT_ENDPOINTS", genericQuitServer.URL+", https://google.com/, https://github.com/, 127.0.0.1:1111/idontexist, notaurl^^ ")
 	initTestingEnv()
 	killGenericEndpoints()
 	clearTestingEnv()
