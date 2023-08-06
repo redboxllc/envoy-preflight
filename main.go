@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/monzo/typhon"
 )
 
 // ServerInfo ... represents the response from Envoy's server info endpoint
@@ -147,27 +146,26 @@ func killGenericEndpoints() {
 
 	for _, genericEndpoint := range config.GenericQuitEndpoints {
 		genericEndpoint = strings.Trim(genericEndpoint, " ")
-		resp := typhon.NewRequest(context.Background(), "POST", genericEndpoint, nil).Send().Response()
-		if resp.Error != nil {
-			log(fmt.Sprintf("Sent POST to '%s', error: %s", genericEndpoint, resp.Error))
+		code, err := postKill(context.TODO(), genericEndpoint)
+		if err != nil {
+			log(fmt.Sprintf("Sent POST to '%s', error: %s", genericEndpoint, err))
 			continue
 		}
-		log(fmt.Sprintf("Sent POST to '%s', status code: %d", genericEndpoint, resp.StatusCode))
+		log(fmt.Sprintf("Sent POST to '%s', status code: %d", genericEndpoint, code))
 	}
 }
 
 func killIstioWithAPI() {
 	log(fmt.Sprintf("Stopping Istio using Istio API '%s' (intended for Istio >v1.2)", config.IstioQuitAPI))
 
-	url := fmt.Sprintf("%s/quitquitquit", config.IstioQuitAPI)
-	resp := typhon.NewRequest(context.Background(), "POST", url, nil).Send().Response()
 	responseSuccess := false
-
-	if resp.Error != nil {
-		log(fmt.Sprintf("Sent quitquitquit to Istio, error: %d", resp.Error))
+	url := fmt.Sprintf("%s/quitquitquit", config.IstioQuitAPI)
+	code, err := postKill(context.TODO(), url)
+	if err != nil {
+		log(fmt.Sprintf("Sent quitquitquit to Istio, error: %d", err))
 	} else {
-		log(fmt.Sprintf("Sent quitquitquit to Istio, status code: %d", resp.StatusCode))
-		responseSuccess = resp.StatusCode == 200
+		log(fmt.Sprintf("Sent quitquitquit to Istio, status code: %d", code))
+		responseSuccess = code >= 200 && code < 300
 	}
 
 	if !responseSuccess && config.IstioFallbackPkill {
@@ -221,11 +219,7 @@ func pollEnvoy(ctx context.Context, cancel context.CancelFunc) {
 
 	err := backoff.Retry(func() error {
 		pollCount++
-		rsp := typhon.NewRequest(ctx, "GET", url, nil).Send().Response()
-
-		info := &ServerInfo{}
-
-		err := rsp.Decode(info)
+		info, err := getServerInfo(ctx, url)
 		if err != nil {
 			log(fmt.Sprintf("Polling Envoy (%d), error: %s", pollCount, err))
 			return err
