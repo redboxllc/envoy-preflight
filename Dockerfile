@@ -1,4 +1,4 @@
-FROM golang:1.20.6-bookworm AS build
+FROM golang:1.20.7-bookworm AS build
 ARG VERSION="local"
 COPY . /app
 WORKDIR /app
