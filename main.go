@@ -127,11 +127,6 @@ func kill(exitCode int) {
 	case config.NeverKillIstioOnFailure && exitCode != 0:
 		log(fmt.Sprintf(logLineUnformatted, "Skipping Istio kill", "NEVER_KILL_ISTIO_ON_FAILURE is true", exitCode))
 		os.Exit(exitCode)
-	case config.IstioQuitAPI == "":
-		// No istio API sent, fallback to Pkill method
-		log(fmt.Sprintf(logLineUnformatted, "Stopping Istio with pkill", "ISTIO_QUIT_API is not set", exitCode))
-		killGenericEndpoints()
-		killIstioWithPkill()
 	default:
 		// Stop istio using api
 		log(fmt.Sprintf(logLineUnformatted, "Stopping Istio with API", "ISTIO_QUIT_API is set", exitCode))
@@ -167,35 +162,15 @@ func killGenericEndpoints() {
 func killIstioWithAPI() {
 	log(fmt.Sprintf("Stopping Istio using Istio API '%s' (intended for Istio >v1.2)", config.IstioQuitAPI))
 
-	responseSuccess := false
 	ctx, cancel := context.WithTimeout(context.Background(), config.QuitRequestTimeout)
 	defer cancel()
 	url := fmt.Sprintf("%s/quitquitquit", config.IstioQuitAPI)
 	code, err := postKill(ctx, url)
 	if err != nil {
 		log(fmt.Sprintf("Sent quitquitquit to Istio, error: %d", err))
-	} else {
-		log(fmt.Sprintf("Sent quitquitquit to Istio, status code: %d", code))
-		responseSuccess = code >= 200 && code < 300
+		return
 	}
-
-	if !responseSuccess && config.IstioFallbackPkill {
-		log(fmt.Sprintf("quitquitquit failed, will attempt pkill method"))
-		killIstioWithPkill()
-	}
-}
-
-func killIstioWithPkill() {
-	log("Stopping Istio using pkill command (intended for Istio <v1.3)")
-
-	cmd := exec.Command("sh", "-c", "pkill -SIGINT pilot-agent")
-	_, err := cmd.Output()
-	if err == nil {
-		log("Process pilot-agent successfully stopped")
-	} else {
-		errorMessage := err.Error()
-		log("pilot-agent could not be stopped, err: " + errorMessage)
-	}
+	log(fmt.Sprintf("Sent quitquitquit to Istio, status code: %d", code))
 }
 
 func waitForEnvoy() context.Context {
