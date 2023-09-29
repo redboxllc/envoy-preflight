@@ -20,9 +20,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           go version
-          go get github.com/cenk/backoff
-          go get github.com/monzo/typhon  
-          go test -test.timeout 30s 
+          go test -test.timeout 30s
           GOOS=linux GOARCH=amd64 go build -o build/linux/amd64/scuttle
 
       ################################################
