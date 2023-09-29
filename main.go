@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/cenk/backoff"
 	"github.com/monzo/typhon"
@@ -38,6 +40,8 @@ func main() {
 	}
 	blockGenericEndpoints()
 
+	time.Sleep(time.Duration(config.ScuttleSleepOne) * time.Second)
+
 	if len(os.Args) < 2 {
 		log("No arguments received, exiting")
 		return
@@ -49,6 +53,8 @@ func main() {
 		panic(err)
 	}
 
+	time.Sleep(time.Duration(config.ScuttleSleepTwo) * time.Second)
+
 	var proc *os.Process
 
 	// Pass signals to the child process
@@ -56,17 +62,25 @@ func main() {
 		stop := make(chan os.Signal, 2)
 		signal.Notify(stop)
 		for sig := range stop {
+			log(fmt.Sprintf("received signal %d", sig))
 			if proc != nil {
+				log(fmt.Sprintf("signl %d passed to child process", sig))
 				proc.Signal(sig)
 			} else {
 				// Signal received before the process even started. Let's just exit.
+				log(fmt.Sprintf("process didn't started, but signal %d received", sig))
 				log("Received exit signal, exiting")
-				os.Exit(1)
+				if config.IgnoreSigurg && sig == syscall.SIGURG {
+					log("ignoring signal SIGURG")
+				} else {
+					os.Exit(1)
+				}
 			}
 		}
 	}()
 
 	// Start process passed in by user
+	processStart := time.Now()
 	proc, err = os.StartProcess(binary, os.Args[1:], &os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 	})
@@ -74,6 +88,7 @@ func main() {
 		panic(err)
 	}
 
+	log(fmt.Sprintf("start process took: %s", time.Now().Sub(processStart)))
 	state, err := proc.Wait()
 	if err != nil {
 		panic(err)

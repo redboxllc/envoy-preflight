@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -16,6 +17,9 @@ type ScuttleConfig struct {
 	NeverKillIstioOnFailure bool
 	GenericQuitEndpoints    []string
 	GenericReadyEndpoints   []string
+	ScuttleSleepOne         int
+	ScuttleSleepTwo         int
+	IgnoreSigurg            bool
 }
 
 func log(message string) {
@@ -36,7 +40,10 @@ func getConfig() ScuttleConfig {
 		IstioFallbackPkill:      getBoolFromEnv("ISTIO_FALLBACK_PKILL", false, loggingEnabled),
 		NeverKillIstioOnFailure: getBoolFromEnv("NEVER_KILL_ISTIO_ON_FAILURE", false, loggingEnabled),
 		GenericQuitEndpoints:    getStringArrayFromEnv("GENERIC_QUIT_ENDPOINTS", make([]string, 0), loggingEnabled),
-		GenericReadyEndpoints:    getStringArrayFromEnv("GENERIC_READY_ENDPOINTS", make([]string, 0), loggingEnabled),
+		GenericReadyEndpoints:   getStringArrayFromEnv("GENERIC_READY_ENDPOINTS", make([]string, 0), loggingEnabled),
+		ScuttleSleepOne:         getIntFromEnv("SCUTTLE_SLEEP_1", 0),
+		ScuttleSleepTwo:         getIntFromEnv("SCUTTLE_SLEEP_2", 0),
+		IgnoreSigurg:            getBoolFromEnv("SCUTTLE_IGNORE_SIGURG", false, true),
 	}
 
 	return config
@@ -59,6 +66,19 @@ func getStringArrayFromEnv(name string, defaultVal []string, logEnabled bool) []
 	}
 
 	return userValArray
+}
+
+func getIntFromEnv(name string, defaultVal int) int {
+	usrVal := getStringFromEnv(name, "", true)
+	if usrVal == "" {
+		return defaultVal
+	}
+	val, err := strconv.Atoi(usrVal)
+	if err != nil {
+		log(fmt.Sprintf("could not convert %s to int: %s", usrVal, err))
+		return defaultVal
+	}
+	return val
 }
 
 func getStringFromEnv(name string, defaultVal string, logEnabled bool) string {
