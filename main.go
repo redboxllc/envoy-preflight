@@ -26,6 +26,7 @@ var (
 )
 
 func main() {
+	processStart := time.Now()
 	config = getConfig()
 
 	// Check if logging is enabled
@@ -35,8 +36,9 @@ func main() {
 
 	// If an envoy API was set and config is set to wait on envoy
 	if config.EnvoyAdminAPI != "" && config.StartWithoutEnvoy == false {
-		log("Blocking until envoy starts")
+                log(fmt.Sprintf("Blocking until envoy starts after: %s", time.Now().Sub(processStart)))
 		blockIstio()
+                log(fmt.Sprintf("Ended blocking until envoy starts after: %s", time.Now().Sub(processStart)))
 	}
 	blockGenericEndpoints()
 
@@ -58,6 +60,7 @@ func main() {
 	var proc *os.Process
 
 	// Pass signals to the child process
+	log(fmt.Sprintf("starting go routing for handiling signals after: %s", time.Now().Sub(processStart)))
 	go func() {
 		stop := make(chan os.Signal, 2)
 		signal.Notify(stop)
@@ -80,7 +83,7 @@ func main() {
 	}()
 
 	// Start process passed in by user
-	processStart := time.Now()
+	log(fmt.Sprintf("starting process after: %s", time.Now().Sub(processStart)))
 	proc, err = os.StartProcess(binary, os.Args[1:], &os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 	})
@@ -88,7 +91,7 @@ func main() {
 		panic(err)
 	}
 
-	log(fmt.Sprintf("start process took: %s", time.Now().Sub(processStart)))
+	log(fmt.Sprintf("started process after: %s", time.Now().Sub(processStart)))
 	state, err := proc.Wait()
 	if err != nil {
 		panic(err)
