@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -16,9 +18,22 @@ var (
 	goodEventuallyServer *httptest.Server
 	badServer            *httptest.Server
 	genericQuitServer    *httptest.Server
+	slowQuitServer       *httptest.Server
+	callCount            counter
 	envoyDelayTimestamp  int64 = 0
 	envoyDelayMax        int64 = 15
 )
+
+type counter int64
+
+func (c *counter) increment() int {
+	atomic.AddInt64((*int64)(c), 1)
+	return c.int()
+}
+
+func (c *counter) int() int {
+	return int(*c)
+}
 
 func TestMain(m *testing.M) {
 	initTestHTTPServers()
@@ -30,11 +45,13 @@ func initTestHTTPServers() {
 
 	// Always 200 and live envoy state
 	goodServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.increment()
 		w.Write([]byte("{\"state\": \"LIVE\"}")) // Envoy live response
 	}))
 
 	// 503 for 5 requests, then 200 + live envoy state
 	goodEventuallyServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.increment()
 		timeSinceStarted := time.Now().Unix() - envoyDelayTimestamp
 		if timeSinceStarted < envoyDelayMax {
 			fmt.Println("Status Unavailable")
@@ -46,11 +63,20 @@ func initTestHTTPServers() {
 
 	// Always 503
 	badServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.increment()
 		fmt.Println("Status Unavailable")
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 
 	genericQuitServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.increment()
+		fmt.Println("Status Ok")
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	slowQuitServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.increment()
+		time.Sleep(2 * time.Second)
 		fmt.Println("Status Ok")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -70,6 +96,8 @@ func clearTestingEnv() {
 	os.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "")
 	os.Setenv("WAIT_FOR_ENVOY_TIMEOUT", "")
 	os.Setenv("GENERIC_QUIT_ENDPOINTS", "")
+	os.Setenv("QUIT_REQUEST_TIMEOUT", "")
+	callCount = 0
 }
 
 // Inits the test environment and starts the blocking
@@ -131,6 +159,9 @@ func TestGenericQuitEndpoints(t *testing.T) {
 	os.Setenv("GENERIC_QUIT_ENDPOINTS", genericQuitServer.URL+", https://google.com/, https://github.com/, 127.0.0.1:1111/idontexist, notaurl^^ ")
 	initTestingEnv()
 	killGenericEndpoints()
+	if callCount != 1 {
+		t.Errorf("Expected 1 call to genericQuitServer got %d", callCount)
+	}
 	clearTestingEnv()
 }
 
@@ -153,6 +184,35 @@ func TestNoQuitQuitQuitMalformedUrl(t *testing.T) {
 	os.Setenv("ISTIO_QUIT_API", "notaurl^^")
 	initTestingEnv()
 	killIstioWithAPI()
+	clearTestingEnv()
+}
+
+func TestQuitTimeout(t *testing.T) {
+	fmt.Println("Starting TestQuitTimeout")
+	os.Setenv("START_WITHOUT_ENVOY", "false")
+	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
+	os.Setenv("ISTIO_QUIT_API", slowQuitServer.URL)
+	os.Setenv(
+		"GENERIC_QUIT_ENDPOINTS",
+		strings.Join([]string{slowQuitServer.URL, slowQuitServer.URL, genericQuitServer.URL, slowQuitServer.URL}, ", "),
+	)
+	os.Setenv("QUIT_REQUEST_TIMEOUT", "100ms")
+
+	measureCheckFunc := func(targetFunc func(), errorPrefix string) {
+		startCallCount := callCount
+		startTime := time.Now()
+		targetFunc()
+		elapsedTime := time.Now().Sub(startTime)
+		if elapsedTime > 500*time.Millisecond {
+			t.Errorf("%s: took %dms, this exceeds the timeout significantly", errorPrefix, elapsedTime/time.Millisecond)
+		}
+		if callCount-startCallCount < 1 {
+			t.Errorf("%s: quit endpoint was not called", errorPrefix)
+		}
+	}
+	initTestingEnv()
+	measureCheckFunc(killIstioWithAPI, "killIstioWithAPI()")
+	measureCheckFunc(killGenericEndpoints, "killGenericEndpoints()")
 	clearTestingEnv()
 }
 
