@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -144,23 +145,33 @@ func killGenericEndpoints() {
 		return
 	}
 
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), config.QuitRequestTimeout)
+	defer cancel()
 	for _, genericEndpoint := range config.GenericQuitEndpoints {
-		genericEndpoint = strings.Trim(genericEndpoint, " ")
-		code, err := postKill(context.TODO(), genericEndpoint)
-		if err != nil {
-			log(fmt.Sprintf("Sent POST to '%s', error: %s", genericEndpoint, err))
-			continue
-		}
-		log(fmt.Sprintf("Sent POST to '%s', status code: %d", genericEndpoint, code))
+		func(ctx context.Context, genericEndpoint string) {
+			wg.Add(1)
+			defer wg.Done()
+			genericEndpoint = strings.Trim(genericEndpoint, " ")
+			code, err := postKill(ctx, genericEndpoint)
+			if err != nil {
+				log(fmt.Sprintf("Sent POST to '%s', error: %s", genericEndpoint, err))
+				return
+			}
+			log(fmt.Sprintf("Sent POST to '%s', status code: %d", genericEndpoint, code))
+		}(ctx, genericEndpoint)
 	}
+	wg.Wait()
 }
 
 func killIstioWithAPI() {
 	log(fmt.Sprintf("Stopping Istio using Istio API '%s' (intended for Istio >v1.2)", config.IstioQuitAPI))
 
 	responseSuccess := false
+	ctx, cancel := context.WithTimeout(context.Background(), config.QuitRequestTimeout)
+	defer cancel()
 	url := fmt.Sprintf("%s/quitquitquit", config.IstioQuitAPI)
-	code, err := postKill(context.TODO(), url)
+	code, err := postKill(ctx, url)
 	if err != nil {
 		log(fmt.Sprintf("Sent quitquitquit to Istio, error: %d", err))
 	} else {
