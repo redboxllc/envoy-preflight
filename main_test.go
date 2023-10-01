@@ -91,12 +91,13 @@ func initTestingEnv() {
 
 // Reset all the environment variables
 func clearTestingEnv() {
-	os.Setenv("START_WITHOUT_ENVOY", "")
-	os.Setenv("ENVOY_ADMIN_API", "")
-	os.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "")
-	os.Setenv("WAIT_FOR_ENVOY_TIMEOUT", "")
-	os.Setenv("GENERIC_QUIT_ENDPOINTS", "")
-	os.Setenv("QUIT_REQUEST_TIMEOUT", "")
+	os.Unsetenv("START_WITHOUT_ENVOY")
+	os.Unsetenv("ENVOY_ADMIN_API")
+	os.Unsetenv("QUIT_WITHOUT_ENVOY_TIMEOUT")
+	os.Unsetenv("WAIT_FOR_ENVOY_TIMEOUT")
+	os.Unsetenv("GENERIC_QUIT_ONLY")
+	os.Unsetenv("GENERIC_QUIT_ENDPOINTS")
+	os.Unsetenv("QUIT_REQUEST_TIMEOUT")
 	callCount = 0
 }
 
@@ -167,19 +168,17 @@ func TestGenericQuitEndpoints(t *testing.T) {
 
 // Tests GenericQuitOnly triggers GenericQuitEndpoints
 func TestGenericQuitOnly(t *testing.T) {
-	var quitEndpointCalled bool
 	fmt.Println("Starting TestGenericQuitOnly")
-	checkCallServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		quitEndpointCalled = true
-	}))
+	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
+	os.Setenv("ISTIO_QUIT_API", genericQuitServer.URL)
 	os.Setenv("GENERIC_QUIT_ONLY", "true")
-	os.Setenv("GENERIC_QUIT_ENDPOINTS", fmt.Sprintf("http://%s", checkCallServer.Listener.Addr().String()))
+	os.Setenv("GENERIC_QUIT_ENDPOINTS", genericQuitServer.URL)
 	initTestingEnv()
+	defer clearTestingEnv()
 	kill(0)
-	if quitEndpointCalled == false {
+	if callCount != 1 {
 		t.Error("Expected GENERIC_QUIT_ONLY to trigger GENERIC_QUIT_ENDPOINTS")
 	}
-	checkCallServer.Close()
 }
 
 // Tests scuttle does not fail when the /quitquitquit endpoint does not return a response
