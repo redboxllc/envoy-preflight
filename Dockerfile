@@ -1,4 +1,4 @@
-FROM golang:1.21.2 AS build
+FROM golang:1.21.3 AS build
 ARG VERSION="local"
 
 WORKDIR /app
