@@ -77,7 +77,7 @@ func main() {
 
 		for sig := range stop {
 			if sig == syscall.SIGURG {
-				// SIGURG is used by Golang for it's own purposes, ignore it as these signals
+				// SIGURG is used by Golang for its own purposes, ignore it as these signals
 				// are most likely "junk" from Golang not from K8s/Docker
 				log(fmt.Sprintf("Received signal '%v', ignoring", sig))
 			} else if proc == nil {
@@ -87,7 +87,10 @@ func main() {
 			} else {
 				// Proc is not null, so the child process is running and should also receive this signal
 				log(fmt.Sprintf("Received signal '%v', passing to child", sig))
-				proc.Signal(sig)
+				err := proc.Signal(sig)
+				if err != nil {
+					log(fmt.Sprintf("Failed passing signal '%v' to child, error: %s", sig, err))
+				}
 			}
 		}
 	}()
