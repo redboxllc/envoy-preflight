@@ -2,8 +2,8 @@ ARG GO_VERSION=1
 FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:${GO_VERSION}-bookworm AS build
 
 ARG VERSION=local
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 
 COPY . /app
 WORKDIR /app
