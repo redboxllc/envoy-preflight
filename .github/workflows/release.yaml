@@ -55,12 +55,14 @@ jobs:
       - name: Build Docker Image
         uses: docker/build-push-action@v5
         with:
-          tags: latest,${{ steps.get_version.outputs.VERSION }}
           platforms: linux/amd64,linux/arm64
           push: ${{ startsWith(github.ref, 'refs/tags/') }}
           build-args: |
             VERSION=${{ steps.get_version.outputs.VERSION }}
             GO_VERSION=${{ env.GO_VERSION }}
+          tags: |
+            kvij/scuttle:latest
+            kvij/scuttle:${{ steps.get_version.outputs.VERSION }}
       # On tag, Pack zip of scuttle for GitHub Release
       - name: Pack
         run: |
