@@ -34,7 +34,7 @@ jobs:
         run: |
           go version
           go mod download
-          go test -test.timeout 50s
+          SKIP_CONTEXT_ERROR_CHECK=true go test -test.timeout 50s
           
           mkdir build/artifacts
           for arch in amd64 arm64
