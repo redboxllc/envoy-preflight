@@ -87,17 +87,6 @@ func initTestingEnv() {
 	// Always update env variables for new test
 	os.Setenv("SCUTTLE_LOGGING", "true")
 	config = getConfig()
-}
-
-// Reset all the environment variables
-func clearTestingEnv() {
-	os.Unsetenv("START_WITHOUT_ENVOY")
-	os.Unsetenv("ENVOY_ADMIN_API")
-	os.Unsetenv("QUIT_WITHOUT_ENVOY_TIMEOUT")
-	os.Unsetenv("WAIT_FOR_ENVOY_TIMEOUT")
-	os.Unsetenv("GENERIC_QUIT_ONLY")
-	os.Unsetenv("GENERIC_QUIT_ENDPOINTS")
-	os.Unsetenv("QUIT_REQUEST_TIMEOUT")
 	callCount = 0
 }
 
@@ -109,7 +98,6 @@ func initAndRun(exitCode int) {
 	if blockingCtx := waitForEnvoy(); blockingCtx != nil {
 		<-blockingCtx.Done()
 		err := blockingCtx.Err()
-		defer clearTestingEnv()
 		if err == nil || errors.Is(err, context.Canceled) {
 			log("Blocking finished, Envoy has started")
 		} else if errors.Is(err, context.DeadlineExceeded) {
@@ -126,7 +114,7 @@ func initAndRun(exitCode int) {
 // Tests START_WITHOUT_ENVOY works with failing envoy mock server
 func TestBlockingDisabled(t *testing.T) {
 	fmt.Println("Starting TestBlockingDisabled")
-	os.Setenv("START_WITHOUT_ENVOY", "true")
+	t.Setenv("START_WITHOUT_ENVOY", "true")
 	initAndRun(-1)
 	// If your tests hang and never finish, this test "failed"
 	// Also try go test -timeout <seconds>s
@@ -135,16 +123,16 @@ func TestBlockingDisabled(t *testing.T) {
 // Tests block function with working envoy mock server
 func TestBlockingEnabled(t *testing.T) {
 	fmt.Println("Starting TestBlockingEnabled")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
+	t.Setenv("START_WITHOUT_ENVOY", "false")
+	t.Setenv("ENVOY_ADMIN_API", goodServer.URL)
 	initAndRun(-1)
 }
 
 // Tests block function with envoy mock server that fails for 15 seconds, then works
 func TestSlowEnvoy(t *testing.T) {
 	fmt.Println("Starting TestSlowEnvoy")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("ENVOY_ADMIN_API", goodEventuallyServer.URL)
+	t.Setenv("START_WITHOUT_ENVOY", "false")
+	t.Setenv("ENVOY_ADMIN_API", goodEventuallyServer.URL)
 	envoyDelayTimestamp = time.Now().Unix()
 	initAndRun(-1)
 }
@@ -152,29 +140,27 @@ func TestSlowEnvoy(t *testing.T) {
 // Tests generic quit endpoints are sent
 func TestGenericQuitEndpoints(t *testing.T) {
 	fmt.Println("Starting TestGenericQuitEndpoints")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
+	t.Setenv("START_WITHOUT_ENVOY", "false")
+	t.Setenv("ENVOY_ADMIN_API", goodServer.URL)
 	// Valid URLs don't matter, just need something that will generate an HTTP response
 	// 127.0.0.1:1111/idontexist is to verify we don't panic if a nonexistent URL is given
 	// notaurl^^ is to verify a malformatted URL does not result in panic
-	os.Setenv("GENERIC_QUIT_ENDPOINTS", genericQuitServer.URL+", https://google.com/, https://github.com/, 127.0.0.1:1111/idontexist, notaurl^^ ")
+	t.Setenv("GENERIC_QUIT_ENDPOINTS", genericQuitServer.URL+", https://google.com/, https://github.com/, 127.0.0.1:1111/idontexist, notaurl^^ ")
 	initTestingEnv()
 	killGenericEndpoints()
 	if callCount != 1 {
 		t.Errorf("Expected 1 call to genericQuitServer got %d", callCount)
 	}
-	clearTestingEnv()
 }
 
 // Tests GenericQuitOnly triggers GenericQuitEndpoints
 func TestGenericQuitOnly(t *testing.T) {
 	fmt.Println("Starting TestGenericQuitOnly")
-	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
-	os.Setenv("ISTIO_QUIT_API", genericQuitServer.URL)
-	os.Setenv("GENERIC_QUIT_ONLY", "true")
-	os.Setenv("GENERIC_QUIT_ENDPOINTS", genericQuitServer.URL)
+	t.Setenv("ENVOY_ADMIN_API", goodServer.URL)
+	t.Setenv("ISTIO_QUIT_API", genericQuitServer.URL)
+	t.Setenv("GENERIC_QUIT_ONLY", "true")
+	t.Setenv("GENERIC_QUIT_ENDPOINTS", genericQuitServer.URL)
 	initTestingEnv()
-	defer clearTestingEnv()
 	kill(0)
 	if callCount != 1 {
 		t.Error("Expected GENERIC_QUIT_ONLY to trigger GENERIC_QUIT_ENDPOINTS")
@@ -184,35 +170,33 @@ func TestGenericQuitOnly(t *testing.T) {
 // Tests scuttle does not fail when the /quitquitquit endpoint does not return a response
 func TestNoQuitQuitQuitResponse(t *testing.T) {
 	fmt.Println("Starting TestNoQuitQuitQuitResponse")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
-	os.Setenv("ISTIO_QUIT_API", "127.0.0.1:1111/idontexist")
+	t.Setenv("START_WITHOUT_ENVOY", "false")
+	t.Setenv("ENVOY_ADMIN_API", goodServer.URL)
+	t.Setenv("ISTIO_QUIT_API", "127.0.0.1:1111/idontexist")
 	initTestingEnv()
 	killIstioWithAPI()
-	clearTestingEnv()
 }
 
 // Tests scuttle does not fail when the /quitquitquit endpoint is not a valid URL
 func TestNoQuitQuitQuitMalformedUrl(t *testing.T) {
 	fmt.Println("Starting TestNoQuitQuitQuitMalformedUrl")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
-	os.Setenv("ISTIO_QUIT_API", "notaurl^^")
+	t.Setenv("START_WITHOUT_ENVOY", "false")
+	t.Setenv("ENVOY_ADMIN_API", goodServer.URL)
+	t.Setenv("ISTIO_QUIT_API", "notaurl^^")
 	initTestingEnv()
 	killIstioWithAPI()
-	clearTestingEnv()
 }
 
 func TestQuitTimeout(t *testing.T) {
 	fmt.Println("Starting TestQuitTimeout")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("ENVOY_ADMIN_API", goodServer.URL)
-	os.Setenv("ISTIO_QUIT_API", slowQuitServer.URL)
-	os.Setenv(
+	t.Setenv("START_WITHOUT_ENVOY", "false")
+	t.Setenv("ENVOY_ADMIN_API", goodServer.URL)
+	t.Setenv("ISTIO_QUIT_API", slowQuitServer.URL)
+	t.Setenv(
 		"GENERIC_QUIT_ENDPOINTS",
 		strings.Join([]string{slowQuitServer.URL, slowQuitServer.URL, genericQuitServer.URL, slowQuitServer.URL}, ", "),
 	)
-	os.Setenv("QUIT_REQUEST_TIMEOUT", "100ms")
+	t.Setenv("QUIT_REQUEST_TIMEOUT", "100ms")
 
 	measureCheckFunc := func(targetFunc func(), errorPrefix string) {
 		startCallCount := callCount
@@ -229,17 +213,15 @@ func TestQuitTimeout(t *testing.T) {
 	initTestingEnv()
 	measureCheckFunc(killIstioWithAPI, "killIstioWithAPI()")
 	measureCheckFunc(killGenericEndpoints, "killGenericEndpoints()")
-	clearTestingEnv()
 }
 
 // Tests scuttle waits
 func TestWaitTillTimeoutForEnvoy(t *testing.T) {
 	fmt.Println("Starting TestWaitTillTimeoutForEnvoy")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "500ms")
-	os.Setenv("ENVOY_ADMIN_API", badServer.URL)
+	t.Setenv("START_WITHOUT_ENVOY", "false")
+	t.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "500ms")
+	t.Setenv("ENVOY_ADMIN_API", badServer.URL)
 	initTestingEnv()
-	defer clearTestingEnv()
 	dur, _ := time.ParseDuration("500ms")
 	config.QuitWithoutEnvoyTimeout = dur
 	blockingCtx := waitForEnvoy()
@@ -263,11 +245,10 @@ func TestWaitTillTimeoutForEnvoy(t *testing.T) {
 // Tests scuttle will continue after WAIT_FOR_ENVOY_TIMEOUT expires and envoy is not ready
 func TestWaitForEnvoyTimeoutContinueWithoutEnvoy(t *testing.T) {
 	fmt.Println("Starting TestWaitForEnvoyTimeoutContinueWithoutEnvoy")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("WAIT_FOR_ENVOY_TIMEOUT", "5s")
-	os.Setenv("ENVOY_ADMIN_API", badServer.URL)
+	t.Setenv("START_WITHOUT_ENVOY", "false")
+	t.Setenv("WAIT_FOR_ENVOY_TIMEOUT", "5s")
+	t.Setenv("ENVOY_ADMIN_API", badServer.URL)
 	initTestingEnv()
-	defer clearTestingEnv()
 	blockingCtx := waitForEnvoy()
 	<-blockingCtx.Done()
 	err := blockingCtx.Err()
