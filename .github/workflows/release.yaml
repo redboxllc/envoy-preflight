@@ -36,7 +36,7 @@ jobs:
           go mod download
           SKIP_CONTEXT_ERROR_CHECK=true go test -test.timeout 50s
           
-          mkdir build/artifacts
+          mkdir -p build/artifacts
           for arch in amd64 arm64
           do 
             echo "Building scuttle-linux-$arch binary"
