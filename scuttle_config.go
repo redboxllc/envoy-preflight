@@ -20,6 +20,7 @@ type ScuttleConfig struct {
 	ScuttleSleepOne         int
 	ScuttleSleepTwo         int
 	IgnoreSigurg            bool
+	ScuttleSleepAfterSignal int
 }
 
 func log(message string) {
@@ -44,6 +45,7 @@ func getConfig() ScuttleConfig {
 		ScuttleSleepOne:         getIntFromEnv("SCUTTLE_SLEEP_1", 0),
 		ScuttleSleepTwo:         getIntFromEnv("SCUTTLE_SLEEP_2", 0),
 		IgnoreSigurg:            getBoolFromEnv("SCUTTLE_IGNORE_SIGURG", false, true),
+		ScuttleSleepAfterSignal: getIntFromEnv("SCUTTLE_SLEEP_AFTER_SIGNAL", 0),
 	}
 
 	return config

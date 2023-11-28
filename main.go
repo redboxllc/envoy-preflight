@@ -36,9 +36,9 @@ func main() {
 
 	// If an envoy API was set and config is set to wait on envoy
 	if config.EnvoyAdminAPI != "" && config.StartWithoutEnvoy == false {
-                log(fmt.Sprintf("Blocking until envoy starts after: %s", time.Now().Sub(processStart)))
+		log(fmt.Sprintf("Blocking until envoy starts after: %s", time.Now().Sub(processStart)))
 		blockIstio()
-                log(fmt.Sprintf("Ended blocking until envoy starts after: %s", time.Now().Sub(processStart)))
+		log(fmt.Sprintf("Ended blocking until envoy starts after: %s", time.Now().Sub(processStart)))
 	}
 	blockGenericEndpoints()
 
@@ -66,6 +66,9 @@ func main() {
 		signal.Notify(stop)
 		for sig := range stop {
 			log(fmt.Sprintf("received signal %d", sig))
+			log(fmt.Sprintf("sleeping for %d before passing it down", config.ScuttleSleepAfterSignal))
+			time.Sleep(time.Duration(config.ScuttleSleepAfterSignal) * time.Second)
+			log("passing down signal")
 			if proc != nil {
 				log(fmt.Sprintf("signl %d passed to child process", sig))
 				proc.Signal(sig)
@@ -98,6 +101,7 @@ func main() {
 	}
 
 	exitCode := state.ExitCode()
+	log(fmt.Sprintf("system exited with exitCode: %d", exitCode))
 
 	kill(exitCode)
 
