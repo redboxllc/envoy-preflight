@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -66,11 +67,16 @@ func main() {
 		signal.Notify(stop)
 		for sig := range stop {
 			log(fmt.Sprintf("received signal %d", sig))
-			log(fmt.Sprintf("sleeping for %d before passing it down", config.ScuttleSleepAfterSignal))
-			time.Sleep(time.Duration(config.ScuttleSleepAfterSignal) * time.Second)
 			log("passing down signal")
 			if proc != nil {
-				log(fmt.Sprintf("signl %d passed to child process", sig))
+				if sig != syscall.SIGURG {
+					log("draining listeners and healthcheck/fail...")
+					drainProxy()
+					log("done draining listeners")
+					log(fmt.Sprintf("sleeping for %d before passing it down", config.ScuttleSleepAfterSignal))
+					time.Sleep(time.Duration(config.ScuttleSleepAfterSignal) * time.Second)
+				}
+				log(fmt.Sprintf("signal %d passed to child process", sig))
 				proc.Signal(sig)
 			} else {
 				// Signal received before the process even started. Let's just exit.
@@ -106,6 +112,26 @@ func main() {
 	kill(exitCode)
 
 	os.Exit(exitCode)
+}
+
+func drainProxy() {
+	resp2, err := http.Post("http://localhost:15000/drain_listeners?inboundonly", "application/x-www-form-urlencoded", nil)
+	defer resp2.Body.Close()
+	if err != nil {
+		log(fmt.Sprintf("could not request drain listeners: %s", err))
+		return
+	} else {
+		log(fmt.Sprintf("response from drain inbound: %d", resp2.StatusCode))
+	}
+	resp, err := http.Post("http://localhost:15000/healthcheck/fail", "application/x-www-form-urlencoded", nil)
+	defer resp.Body.Close()
+	if err != nil {
+		log(fmt.Sprintf("could not request healthcheck/fail: %s", err))
+		return
+	} else {
+		log(fmt.Sprintf("response from healthcheck/fail: %d %s", resp.StatusCode))
+	}
+
 }
 
 func kill(exitCode int) {

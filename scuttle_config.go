@@ -85,6 +85,7 @@ func getIntFromEnv(name string, defaultVal int) int {
 
 func getStringFromEnv(name string, defaultVal string, logEnabled bool) string {
 	userVal := os.Getenv(name)
+	log(fmt.Sprintf("%s: %s", name, userVal))
 	if logEnabled {
 		log(fmt.Sprintf("%s: %s", name, userVal))
 	}
