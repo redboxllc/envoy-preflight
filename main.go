@@ -1,4 +1,3 @@
-// Binary scuttle ...
 package main
 
 import (
@@ -9,21 +8,16 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
-	"sync"
-	"time"
-	"syscall"
 
 	"github.com/cenk/backoff"
 	"github.com/monzo/typhon"
 )
 
-// ServerInfo ... represents the response from Envoy's server info endpoint
+var loggingEnabled = false
+
 type ServerInfo struct {
 	State string `json:"state"`
 }
-
-// Version ... Version of the binary, set to value like v1.0.0 in CI using ldflags
-var Version = "vlocal"
 
 var (
 	config ScuttleConfig
@@ -32,52 +26,23 @@ var (
 func main() {
 	config = getConfig()
 
-	log(fmt.Sprintf("Scuttle %s starting up, pid %d", Version, os.Getpid()))
-
-	if len(os.Args) < 2 {
-		log("No arguments received, exiting")
-		return
-	}
-
 	// Check if logging is enabled
 	if config.LoggingEnabled {
 		log("Logging is now enabled")
 	}
 
 	// If an envoy API was set and config is set to wait on envoy
-	if config.EnvoyAdminAPI != "" {
-		if blockingCtx := waitForEnvoy(); blockingCtx != nil {
-			<-blockingCtx.Done()
-			err := blockingCtx.Err()
-			if err == nil || errors.Is(err, context.Canceled) {
-				log("Blocking finished, Envoy has started")
-			} else if errors.Is(err, context.DeadlineExceeded) && config.QuitWithoutEnvoyTimeout > time.Duration(0) {
-				log("Blocking timeout reached and Envoy has not started, exiting scuttle")
-				time.Sleep(3 * time.Second) // give some time for uel sidecar and jaeger to start, so that we can kill it
-				kill(1)
-				os.Exit(1)
-			} else if errors.Is(err, context.DeadlineExceeded) {
-				log("Blocking timeout reached and Envoy has not started, continuing with passed in executable")
-			} else {
-				panic(err.Error())
-			}
-		}
+	if config.EnvoyAdminAPI != "" && config.StartWithoutEnvoy == false {
+		log("Blocking until envoy starts")
+		blockIstio()
+	}
+	blockGenericEndpoints()
+
+	if len(os.Args) < 2 {
+		log("No arguments received, exiting")
+		return
 	}
 
-	if blockingCtx := waitForReadyEndpoints(); blockingCtx != nil {
-		<-blockingCtx.Done()
-		err := blockingCtx.Err()
-		if err == nil || errors.Is(err, context.Canceled) {
-			log("Blocking finished, generic endpoints has started")
-		} else if errors.Is(err, context.DeadlineExceeded) {
-			log("Blocking timeout reached and generic endpoints has not started, exiting scuttle")
-			time.Sleep(3 * time.Second) // give some time for uel sidecar and jaeger to start, so that we can kill it
-			kill(1)
-			os.Exit(1)
-		} else {
-			panic(err.Error())
-		}
-	}
 	// Find the executable the user wants to run
 	binary, err := exec.LookPath(os.Args[1])
 	if err != nil {
@@ -85,26 +50,18 @@ func main() {
 	}
 
 	var proc *os.Process
-	stop := make(chan os.Signal, 2)
-	signal.Notify(stop, syscall.SIGINT) // Only listen to SIGINT until after child proc starts
-	
+
 	// Pass signals to the child process
-	// This takes an OS signal and passes to the child process scuttle starts (proc)
 	go func() {
-		
+		stop := make(chan os.Signal, 2)
+		signal.Notify(stop)
 		for sig := range stop {
-			if sig == syscall.SIGURG {
-				// SIGURG is used by Golang for it's own purposes, ignore it as these signals
-				// are most likely "junk" from Golang not from K8s/Docker
-				log(fmt.Sprintf("Received signal '%v', ignoring", sig))
-			} else if proc == nil {
-				// Signal received before the process even started. Let's just exit.
-				log(fmt.Sprintf("Received signal '%v', exiting", sig))
-				kill(1) // Attempt to stop sidecars if configured
-			} else {
-				// Proc is not null, so the child process is running and should also receive this signal
-				log(fmt.Sprintf("Received signal '%v', passing to child", sig))
+			if proc != nil {
 				proc.Signal(sig)
+			} else {
+				// Signal received before the process even started. Let's just exit.
+				log("Received exit signal, exiting")
+				os.Exit(1)
 			}
 		}
 	}()
@@ -116,9 +73,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	// Once child process starts, listen for any symbol and pass to the child proc
-	signal.Notify(stop)
 
 	state, err := proc.Wait()
 	if err != nil {
@@ -133,25 +87,25 @@ func main() {
 }
 
 func kill(exitCode int) {
-	var logLineUnformatted = "Kill received: (Action: %s, Reason: %s, Exit Code: %d)"
 	switch {
 	case config.EnvoyAdminAPI == "":
-		log(fmt.Sprintf(logLineUnformatted, "Skipping Istio kill", "ENVOY_ADMIN_API not set", exitCode))
+		// We don't have an ENVOY_ADMIN_API env var, do nothing
+		log("No ENVOY_ADMIN_API, doing nothing")
 	case !strings.Contains(config.EnvoyAdminAPI, "127.0.0.1") && !strings.Contains(config.EnvoyAdminAPI, "localhost"):
-		log(fmt.Sprintf(logLineUnformatted, "Skipping Istio kill", "ENVOY_ADMIN_API is not a localhost or 127.0.0.1", exitCode))
+		// Envoy is not local; do nothing
+		log("ENVOY_ADMIN_API is not localhost or 127.0.0.1, doing nothing")
 	case config.NeverKillIstio:
-		log(fmt.Sprintf(logLineUnformatted, "Skipping Istio kill", "NEVER_KILL_ISTIO is true", exitCode))
+		// We're configured never to kill envoy, do nothing
+		log("NEVER_KILL_ISTIO is true, doing nothing")
 	case config.NeverKillIstioOnFailure && exitCode != 0:
-		log(fmt.Sprintf(logLineUnformatted, "Skipping Istio kill", "NEVER_KILL_ISTIO_ON_FAILURE is true", exitCode))
+		log("NEVER_KILL_ISTIO_ON_FAILURE is true, exiting without killing Istio")
 		os.Exit(exitCode)
 	case config.IstioQuitAPI == "":
 		// No istio API sent, fallback to Pkill method
-		log(fmt.Sprintf(logLineUnformatted, "Stopping Istio with pkill", "ISTIO_QUIT_API is not set", exitCode))
 		killGenericEndpoints()
 		killIstioWithPkill()
 	default:
 		// Stop istio using api
-		log(fmt.Sprintf(logLineUnformatted, "Stopping Istio with API", "ISTIO_QUIT_API is set", exitCode))
 		killGenericEndpoints()
 		killIstioWithAPI()
 	}
@@ -178,19 +132,12 @@ func killIstioWithAPI() {
 
 	url := fmt.Sprintf("%s/quitquitquit", config.IstioQuitAPI)
 	resp := typhon.NewRequest(context.Background(), "POST", url, nil).Send().Response()
-	responseSuccess := false
-
-	if resp.Error != nil {
-		log(fmt.Sprintf("Sent quitquitquit to Istio, error: %d", resp.Error))
-	} else {
-		log(fmt.Sprintf("Sent quitquitquit to Istio, status code: %d", resp.StatusCode))
-		responseSuccess = resp.StatusCode == 200
-	}
-
-	if !responseSuccess && config.IstioFallbackPkill {
+	log(fmt.Sprintf("Sent quitquitquit to Istio, status code: %d", resp.StatusCode))
+	if resp.StatusCode != 200 && config.IstioFallbackPkill {
 		log(fmt.Sprintf("quitquitquit failed, will attempt pkill method"))
 		killIstioWithPkill()
 	}
+	//ToDo: Fallback to pkill if this fails?
 }
 
 func killIstioWithPkill() {
@@ -206,104 +153,59 @@ func killIstioWithPkill() {
 	}
 }
 
-func waitForEnvoy() context.Context {
+func blockIstio() {
 	if config.StartWithoutEnvoy {
-		return nil
-	}
-	var blockingCtx context.Context
-	var cancel context.CancelFunc
-	if config.QuitWithoutEnvoyTimeout > time.Duration(0) {
-		blockingCtx, cancel = context.WithTimeout(context.Background(), config.QuitWithoutEnvoyTimeout)
-	} else if config.WaitForEnvoyTimeout > time.Duration(0) {
-		blockingCtx, cancel = context.WithTimeout(context.Background(), config.WaitForEnvoyTimeout)
-	} else {
-		blockingCtx, cancel = context.WithCancel(context.Background())
+		return
 	}
 
-	log("Blocking until Envoy starts")
-	go pollEnvoy(blockingCtx, cancel)
-	return blockingCtx
-}
-
-func pollEnvoy(ctx context.Context, cancel context.CancelFunc) {
 	url := fmt.Sprintf("%s/server_info", config.EnvoyAdminAPI)
-	pollCount := 0
+
 	b := backoff.NewExponentialBackOff()
 	// We wait forever for envoy to start. In practice k8s will kill the pod if we take too long.
-	b.MaxElapsedTime = config.WaitForEnvoyTimeout
-
-	if config.QuitWithoutEnvoyTimeout > time.Duration(0) {
-		b.MaxElapsedTime = config.QuitWithoutEnvoyTimeout
-	}
+	b.MaxElapsedTime = 0
 
 	_ = backoff.Retry(func() error {
-		pollCount++
-		rsp := typhon.NewRequest(ctx, "GET", url, nil).Send().Response()
+		rsp := typhon.NewRequest(context.Background(), "GET", url, nil).Send().Response()
 
 		info := &ServerInfo{}
 
 		err := rsp.Decode(info)
 		if err != nil {
-			log(fmt.Sprintf("Polling Envoy (%d), error: %s", pollCount, err))
 			return err
 		}
 
 		if info.State != "LIVE" {
-			log(fmt.Sprintf("Polling Envoy (%d), status: Not ready yet", pollCount))
 			return errors.New("not live yet")
 		}
 
 		return nil
 	}, b)
-	// Notify the context that it's done, if it has not already been cancelled
-	cancel()
 }
 
-func waitForReadyEndpoints() context.Context {
+func blockGenericEndpoints() {
 	if len(config.GenericReadyEndpoints) == 0 {
-		return nil
-	}
-	var blockingCtx context.Context
-	var cancel context.CancelFunc
-	if config.QuitWithoutGenericReadyEndpointsTimeout > time.Duration(0) {
-		blockingCtx, cancel = context.WithTimeout(context.Background(), config.QuitWithoutGenericReadyEndpointsTimeout)
-	} else {
-		blockingCtx, cancel = context.WithCancel(context.Background())
+		return
 	}
 
-	log("Blocking until generic ready endpoints respond")
-	go pollReadyEndpoints(blockingCtx, cancel)
-	return blockingCtx
-}
-
-func pollReadyEndpoints(ctx context.Context, cancel context.CancelFunc) {
-	wg := sync.WaitGroup{}
 	for _, genericEndpoint := range config.GenericReadyEndpoints {
-		url := strings.Trim(genericEndpoint, " ")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			b := backoff.NewExponentialBackOff()
+		b := backoff.NewExponentialBackOff()
+		// We wait forever for envoy to start. In practice k8s will kill the pod if we take too long.
+		b.MaxElapsedTime = 0
 
-			b.MaxElapsedTime = config.QuitWithoutGenericReadyEndpointsTimeout
+		_ = backoff.Retry(func() error {
+			genericEndpoint = strings.Trim(genericEndpoint, " ")
+			resp := typhon.NewRequest(context.Background(), "GET", genericEndpoint, nil).Send().Response()
+			if resp.Error != nil {
+				log(fmt.Sprintf("Sent GET to '%s', error: %s", genericEndpoint, resp.Error))
+				return resp.Error
+			}
+			log(fmt.Sprintf("Sent GET to '%s', status code: %d", genericEndpoint, resp.StatusCode))
 
-			_ = backoff.Retry(func() error {
-				resp := typhon.NewRequest(ctx, "GET", url, nil).Send().Response()
-				if resp.Error != nil {
-					log(fmt.Sprintf("Sent GET to '%s', error: %s", url, resp.Error))
-					return resp.Error
-				}
-				log(fmt.Sprintf("Sent GET to '%s', status code: %d", url, resp.StatusCode))
-
-				if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-					return nil
-				} else {
-					return fmt.Errorf("endpoint '%s' replied with non-ok status code: %d", url, resp.StatusCode)
-				}
-			}, b)
-		}()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return nil
+			} else {
+				return fmt.Errorf("endpoint '%s' replied with non-ok status code: %d", genericEndpoint, resp.StatusCode)
+			}
+		}, b)
 	}
-
-	wg.Wait()
-	cancel()
 }

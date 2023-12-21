@@ -1,12 +1,13 @@
 package slog
 
 import (
-	"context"
 	"sync"
+
+	"golang.org/x/net/context"
 )
 
 var (
-	defaultLogger  Logger = StdlibLogger{}
+	defaultLogger  Logger = SeelogLogger()
 	defaultLoggerM sync.RWMutex
 )
 

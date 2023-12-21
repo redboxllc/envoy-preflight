@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -33,7 +31,7 @@ func initTestingEnv() {
 		return
 	}
 
-	fmt.Println("Initiating test HTTP servers")
+	fmt.Println("Initing test HTTP servers")
 
 	// Always 200 and live envoy state
 	goodServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,17 +68,8 @@ func initTestingEnv() {
 // Pass in a negative integer to block but skip kill
 func initAndRun(exitCode int) {
 	initTestingEnv()
-	if blockingCtx := waitForEnvoy(); blockingCtx != nil {
-		<-blockingCtx.Done()
-		err := blockingCtx.Err()
-		if err == nil || errors.Is(err, context.Canceled) {
-			log("Blocking finished, Envoy has started")
-		} else if errors.Is(err, context.DeadlineExceeded) {
-			panic(errors.New("timeout reached while waiting for Envoy to start"))
-		} else {
-			panic(err.Error())
-		}
-	}
+	blockIstio()
+	blockGenericEndpoints()
 	if exitCode >= 0 {
 		kill(exitCode)
 	}
@@ -115,70 +104,11 @@ func TestSlowEnvoy(t *testing.T) {
 // Tests generic quit endpoints are sent
 func TestGenericQuitEndpoints(t *testing.T) {
 	fmt.Println("Starting TestGenericQuitEndpoints")
-	// Valid URLs dont matter, just need something that will generate an HTTP response
-	// 127.0.0.1:1111/idontexist is to verify we don't panic if a nonexistent URL is given
-	// notaurl^^ is to verify a malformatted URL does not result in panic
-	os.Setenv("GENERIC_QUIT_ENDPOINTS", "https://google.com/, https://github.com/, 127.0.0.1:1111/idontexist, notaurl^^ ")
-	initTestingEnv()
-	killGenericEndpoints()
-}
-
-// Tests scuttle does not fail when the /quitquitquit endpoint does not return a response
-func TestNoQuitQuitQuitResponse(t *testing.T) {
-	fmt.Println("Starting TestNoQuitQuitQuitResponse")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("ISTIO_QUIT_API", "127.0.0.1:1111/idontexist")
-	initTestingEnv()
-	killIstioWithAPI()
-}
-
-// Tests scuttle does not fail when the /quitquitquit endpoint is not a valid URL
-func TestNoQuitQuitQuitMalformedUrl(t *testing.T) {
-	fmt.Println("Starting TestNoQuitQuitQuitMalformedUrl")
-	os.Setenv("START_WITHOUT_ENVOY", "false")
-	os.Setenv("ISTIO_QUIT_API", "notaurl^^")
-	initTestingEnv()
-	killIstioWithAPI()
-}
-
-// Tests scuttle waits
-func TestWaitTillTimeoutForEnvoy(t *testing.T) {
-	fmt.Println("Starting TestWaitTillTimeoutForEnvoy")
-	os.Setenv("QUIT_WITHOUT_ENVOY_TIMEOUT", "500ms")
-	os.Setenv("ENVOY_ADMIN_API", badServer.URL)
-	initTestingEnv()
-	dur, _ := time.ParseDuration("500ms")
-	config.QuitWithoutEnvoyTimeout = dur
-	blockingCtx := waitForEnvoy()
-	if blockingCtx == nil {
-		t.Fatal("Blocking context was nil")
-	}
-	select {
-	case <-time.After(1 * time.Second):
-		t.Fatal("Context did not timeout")
-	case <-blockingCtx.Done():
-		if !errors.Is(blockingCtx.Err(), context.DeadlineExceeded) {
-			t.Fatalf("Context contains wrong error: %s", blockingCtx.Err())
-		}
-	}
-}
-
-// Tests scuttle will continue after WAIT_FOR_ENVOY_TIMEOUT expires and envoy is not ready
-func TestWaitForEnvoyTimeoutContinueWithoutEnvoy(t *testing.T) {
-	fmt.Println("Starting TestWaitForEnvoyTimeoutContinueWithoutEnvoy")
-	os.Setenv("WAIT_FOR_ENVOY_TIMEOUT", "5s")
-	os.Setenv("ENVOY_ADMIN_API", badServer.URL)
-	initTestingEnv()
-	blockingCtx := waitForEnvoy()
-	<-blockingCtx.Done()
-	err := blockingCtx.Err()
-	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
-		fmt.Println("TestWaitForEnvoyTimeoutContinueWithoutEnvoy err", err)
-		// Err is nil (envoy is up)
-		// or Err is set, but is not a cancellation err
-		// we expect a cancellation when the time is up
-		t.Fail()
-	}
+	os.Setenv("START_WITHOUT_ENVOY", "true")
+	// URLs dont matter, just need something that will generate an HTTP response
+	os.Setenv("GENERIC_QUIT_ENDPOINTS", " https://google.com/, https://github.com/ ")
+	envoyDelayTimestamp = time.Now().Unix()
+	initAndRun(1)
 }
 
 // Tests blockGenericEndpoint function
